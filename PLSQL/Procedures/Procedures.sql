@@ -474,8 +474,9 @@ BEGIN
                     COD_CONJUNTO = PK_CONJUNTO
                     AND COD_BLOQUE = PK_BLOQUE
                     AND COD_APARTAMENTO = PK_APTO
-                    AND PERIODO_MES_CUENTA = L_NUM +1
+                    AND PERIODO_MES_CUENTA = L_NUM + 1
                     AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                PR_SALDO_PENDIENTE(PK_CONJUNTO, PK_BLOQUE, PK_APTO, L_NUM, LN_ANIO);
                 EXIT;
             END IF;
             IF L_NUM != 1 THEN
@@ -502,8 +503,57 @@ CREATE OR REPLACE PROCEDURE PR_SALDO_PENDIENTE (
     PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
     PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE
 )AS
+    LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE := 0;
+    LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+    LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
 BEGIN
-    
+    DBMS_OUTPUT.PUT_LINE('PR_SALDO_PENDIENTE');
+    IF PN_MES = 12 THEN
+        LN_MES := 1;
+        LN_ANIO := PN_ANIO + 1;
+    ELSE
+        LN_MES := PN_MES + 1;
+        LN_ANIO := PN_ANIO;
+    END IF;
+    DBMS_OUTPUT.PUT_LINE(LN_MES);
+    LOOP
+        IF LN_MES = 1 THEN
+            SELECT
+                SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
+            FROM
+                CUENTA_COBRO
+            WHERE
+                PERIODO_MES_CUENTA = 12
+                AND PERIODO_ANIO_CUENTA = LN_ANIO-1;
+        ELSE
+            SELECT
+                SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
+            FROM
+                CUENTA_COBRO
+            WHERE
+                PERIODO_MES_CUENTA = LN_MES-1
+                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+        END IF;
+        IF LS_PENDIENTE IS NULL THEN
+            EXIT;
+        ELSE
+            UPDATE CUENTA_COBRO
+            SET
+                SALDO_PENDIENTE = LS_PENDIENTE
+            WHERE
+                COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO
+                AND PERIODO_MES_CUENTA = LN_MES
+                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+        END IF;
+        IF LN_MES != 12 THEN
+            LN_MES := LN_MES + 1;
+        ELSIF LN_MES = 12 THEN
+            LN_MES := 1;
+            LN_ANIO := LN_ANIO + 1;
+        END IF;
+    END LOOP;
 END PR_SALDO_PENDIENTE;
 /
 
