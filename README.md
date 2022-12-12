@@ -6,7 +6,7 @@
 
 En este proyecto se creo una página web en la cual se pueden administrar apartamentos. Para el desarrollo, se utilizaron las siguientes herramientas:
 
-* Postgres
+* Oracle XE Edition
 * Express
 * React
 * Node
