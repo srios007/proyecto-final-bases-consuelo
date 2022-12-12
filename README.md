@@ -1,37 +1,38 @@
-# PERN Stack
+# Proyecto final bases de datos
 
-The PERN Stack is an acronym for Postgres, Express, React, Node. It's a set of tools to create a complete web application.
+* Christian Caro Vargas - 20181020027
+* Juan Sebastián González Forero - 20181020029
+* Santiago Ríos Valero - 20181020017
 
-To understand this project, I recommend that you could know these tolls:
+En este proyecto se creo una página web en la cual se puede administar algunos aspectos del manejo de avalúos que la empresa Skhape solicitó su desarrollo. Para el desarrollo, se utilizaron las siguientes herramientas:
 
 * Postgres
 * Express
 * React
 * Node
 
-And this other technologies and libraries That I Use in this project:
+### Instalacióm
 
-* Material UI
-* Docker
-
-### Installation
-
-This project consists in a *Web Frontend Application* and a *Web Backend Application*.
-
-First, clone the repo:
+Primero, se clona el siguiente repositorio:
 
 ```bash
-git clone https://github.com/FaztWeb/pern-stack
+git clone https://github.com/srios007/proyecto-final-bases-2-plata.git
 ```
 
-to run the backend you can use docker:
+Segundo, descargar los paquetes: 
 
 ```
-cd server
-docker-compose up
+npm install
+cd client
+npm install
 ```
+Tercero, correr el backend:
 
-to run the frontend:
+```
+npm run dev
+```
+Cuarto, correr el front:
+
 ```
 cd client
 npm start
