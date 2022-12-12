@@ -31,112 +31,121 @@ DECLARE
     LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
     L_NUM        INTEGER;
 BEGIN
-    SELECT
-        MAX(PERIODO_MES_CUENTA),
-        MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
-        LN_ANIO
-    FROM
-        CUENTA_COBRO
-    WHERE
-        COD_CONJUNTO = :NEW.COD_CONJUNTO
-        AND COD_BLOQUE = :NEW.COD_BLOQUE
-        AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO
-    GROUP BY
-        PERIODO_ANIO_CUENTA
-    ORDER BY
-        PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
-    SELECT
-        FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
-        :NEW.COD_BLOQUE,
-        :NEW.COD_APARTAMENTO,
-        LN_MES,
-        LN_ANIO) INTO LS_ACTUAL
-    FROM
-        DUAL;
-    SELECT
-        FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
-        :NEW.COD_BLOQUE,
-        :NEW.COD_APARTAMENTO,
-        LN_MES,
-        LN_ANIO) INTO LS_PENDIENTE
-    FROM
-        DUAL;
-    IF LS_PENDIENTE > 0 THEN
-        L_NUM := LN_MES;
-        LOOP
-            SELECT
-                FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
-                :NEW.COD_BLOQUE,
-                :NEW.COD_APARTAMENTO,
-                L_NUM,
-                LN_ANIO) INTO LS_PENDIENTE
-            FROM
-                DUAL;
-            IF LS_PENDIENTE = 0 THEN
-                LN_MES := L_NUM;
-                SELECT
-                    FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
-                    :NEW.COD_BLOQUE,
-                    :NEW.COD_APARTAMENTO,
-                    LN_MES,
-                    LN_ANIO) INTO LS_ACTUAL
-                FROM
-                    DUAL;
-                EXIT;
-            END IF;
-            IF L_NUM = 1 THEN
-                LN_ANIO := LN_ANIO - 1;
-                LN_MES := 12;
-                L_NUM := LN_MES;
-            END IF;
-            EXIT WHEN L_NUM = 1;
-            L_NUM := L_NUM - 1;
-        END LOOP;
-        IF LS_PENDIENTE < :NEW.VALOR_PAGADO THEN
-            LS_RESTANTE := :NEW.VALOR_PAGADO - LS_PENDIENTE;
-            UPDATE CUENTA_COBRO
-            SET
-                SALDO_PENDIENTE = 0,
-                SALDO_ACTUAL = LS_ACTUAL - LS_RESTANTE
-            WHERE
-                PERIODO_MES_CUENTA = LN_MES
-                AND PERIODO_ANIO_CUENTA = LN_ANIO
-                AND COD_CONJUNTO = :NEW.COD_CONJUNTO
-                AND COD_BLOQUE = :NEW.COD_BLOQUE
-                AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
-            IF LS_ACTUAL <= 0 THEN
-                UPDATE CUENTA_COBRO
-                SET
-                    ESTADO_CUENTA = 'Pagado'
-                WHERE
-                    PERIODO_MES_CUENTA = LN_MES
-                    AND PERIODO_ANIO_CUENTA = LN_ANIO
-                    AND COD_CONJUNTO = :NEW.COD_CONJUNTO
-                    AND COD_BLOQUE = :NEW.COD_BLOQUE
-                    AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
-            END IF;
-        ELSE
-            UPDATE CUENTA_COBRO
-            SET
-                SALDO_PENDIENTE = LS_PENDIENTE - :NEW.VALOR_PAGADO
-            WHERE
-                PERIODO_MES_CUENTA = LN_MES
-                AND PERIODO_ANIO_CUENTA = LN_ANIO
-                AND COD_CONJUNTO = :NEW.COD_CONJUNTO
-                AND COD_BLOQUE = :NEW.COD_BLOQUE
-                AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
-        END IF;
-    ELSE
-        UPDATE CUENTA_COBRO
-        SET
-            SALDO_PENDIENTE = LS_ACTUAL - :NEW.VALOR_PAGADO
-        WHERE
-            PERIODO_MES_CUENTA = LN_MES
-            AND PERIODO_ANIO_CUENTA = LN_ANIO
-            AND COD_CONJUNTO = :NEW.COD_CONJUNTO
-            AND COD_BLOQUE = :NEW.COD_BLOQUE
-            AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
-    END IF;
+    DBMS_OUTPUT.PUT_LINE('TR_PAGO_CUENTA');
+    PR_PAGAR_SALDO(:NEW.COD_CONJUNTO, :NEW.COD_BLOQUE, :NEW.COD_APARTAMENTO, :NEW.VALOR_PAGADO);
+ -- UPDATE CUENTA_COBRO
+ -- SET
+ --     SALDO_ACTUAL = :NEW.VALOR_PAGADO
+ -- WHERE
+ --     COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --     AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --     AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
+ -- SELECT
+ --     MAX(PERIODO_MES_CUENTA),
+ --     MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
+ --     LN_ANIO
+ -- FROM
+ --     CUENTA_COBRO
+ -- WHERE
+ --     COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --     AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --     AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO
+ -- GROUP BY
+ --     PERIODO_ANIO_CUENTA
+ -- ORDER BY
+ --     PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
+ -- SELECT
+ --     FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
+ --     :NEW.COD_BLOQUE,
+ --     :NEW.COD_APARTAMENTO,
+ --     LN_MES,
+ --     LN_ANIO) INTO LS_ACTUAL
+ -- FROM
+ --     DUAL;
+ -- SELECT
+ --     FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
+ --     :NEW.COD_BLOQUE,
+ --     :NEW.COD_APARTAMENTO,
+ --     LN_MES,
+ --     LN_ANIO) INTO LS_PENDIENTE
+ -- FROM
+ --     DUAL;
+ -- IF LS_PENDIENTE > 0 THEN
+ --     L_NUM := LN_MES;
+ --     LOOP
+ --         SELECT
+ --             FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
+ --             :NEW.COD_BLOQUE,
+ --             :NEW.COD_APARTAMENTO,
+ --             L_NUM,
+ --             LN_ANIO) INTO LS_PENDIENTE
+ --         FROM
+ --             DUAL;
+ --         IF LS_PENDIENTE = 0 THEN
+ --             LN_MES := L_NUM;
+ --             SELECT
+ --                 FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
+ --                 :NEW.COD_BLOQUE,
+ --                 :NEW.COD_APARTAMENTO,
+ --                 LN_MES,
+ --                 LN_ANIO) INTO LS_ACTUAL
+ --             FROM
+ --                 DUAL;
+ --             EXIT;
+ --         END IF;
+ --         IF L_NUM = 1 THEN
+ --             LN_ANIO := LN_ANIO - 1;
+ --             LN_MES := 12;
+ --             L_NUM := LN_MES;
+ --         END IF;
+ --         EXIT WHEN L_NUM = 1;
+ --         L_NUM := L_NUM - 1;
+ --     END LOOP;
+ --     IF LS_PENDIENTE < :NEW.VALOR_PAGADO THEN
+ --         LS_RESTANTE := :NEW.VALOR_PAGADO - LS_PENDIENTE;
+ --         UPDATE CUENTA_COBRO
+ --         SET
+ --             SALDO_PENDIENTE = 0,
+ --             SALDO_ACTUAL = LS_ACTUAL - LS_RESTANTE
+ --         WHERE
+ --             PERIODO_MES_CUENTA = LN_MES
+ --             AND PERIODO_ANIO_CUENTA = LN_ANIO
+ --             AND COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --             AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --             AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
+ --         IF LS_ACTUAL <= 0 THEN
+ --             UPDATE CUENTA_COBRO
+ --             SET
+ --                 ESTADO_CUENTA = 'Pagado'
+ --             WHERE
+ --                 PERIODO_MES_CUENTA = LN_MES
+ --                 AND PERIODO_ANIO_CUENTA = LN_ANIO
+ --                 AND COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --                 AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --                 AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
+ --         END IF;
+ --     ELSE
+ --         UPDATE CUENTA_COBRO
+ --         SET
+ --             SALDO_PENDIENTE = LS_PENDIENTE - :NEW.VALOR_PAGADO
+ --         WHERE
+ --             PERIODO_MES_CUENTA = LN_MES
+ --             AND PERIODO_ANIO_CUENTA = LN_ANIO
+ --             AND COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --             AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --             AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
+ --     END IF;
+ -- ELSE
+ --     UPDATE CUENTA_COBRO
+ --     SET
+ --         SALDO_PENDIENTE = LS_ACTUAL - :NEW.VALOR_PAGADO
+ --     WHERE
+ --         PERIODO_MES_CUENTA = LN_MES
+ --         AND PERIODO_ANIO_CUENTA = LN_ANIO
+ --         AND COD_CONJUNTO = :NEW.COD_CONJUNTO
+ --         AND COD_BLOQUE = :NEW.COD_BLOQUE
+ --         AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
+ -- END IF;
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(-20001, 'TR_PAGO_CUENTA Ha ocurrido un error: '
@@ -145,116 +154,9 @@ EXCEPTION
 END;
 /
 
------------------------------------------------------- Trigger para actualizar el saldo anterior de una cuenta de cobro
-
-
-CREATE OR REPLACE TRIGGER TR_SALDO_PAGADO BEFORE
-    UPDATE ON CUENTA_COBRO FOR EACH ROW FOLLOWS TR_INIT_CUENTA
-DECLARE
-    LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
-    LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
-    LS_RESTANTE  CUENTA_COBRO.SALDO_ACTUAL%TYPE;
-    LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
-    LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
-    LF_ACTUAL    PAGO.FECHA_PAGO%TYPE;
-    L_NUM        INTEGER;
-    PRAGMA AUTONOMOUS_TRANSACTION;
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('TR_SALDO_PAGADO:');
-    SELECT
-        MAX(PERIODO_MES_CUENTA),
-        MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
-        LN_ANIO
-    FROM
-        CUENTA_COBRO
-    WHERE
-        COD_CONJUNTO = :NEW.COD_CONJUNTO
-        AND COD_BLOQUE = :NEW.COD_BLOQUE
-        AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO
-    GROUP BY
-        PERIODO_ANIO_CUENTA
-    ORDER BY
-        PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
-    SELECT
-        FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
-        :NEW.COD_BLOQUE,
-        :NEW.COD_APARTAMENTO,
-        LN_MES,
-        LN_ANIO) INTO LS_PENDIENTE
-    FROM
-        DUAL;
-    SELECT
-        FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
-        :NEW.COD_BLOQUE,
-        :NEW.COD_APARTAMENTO,
-        LN_MES,
-        LN_ANIO) INTO LS_ACTUAL
-    FROM
-        DUAL;
-    IF LS_PENDIENTE > 0 AND LN_MES > 1 THEN
-        L_NUM := LN_MES - 1;
-        LOOP
-            SELECT
-                FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
-                :NEW.COD_BLOQUE,
-                :NEW.COD_APARTAMENTO,
-                L_NUM,
-                LN_ANIO) INTO LS_PENDIENTE
-            FROM
-                DUAL;
-            IF LS_PENDIENTE = 0 AND L_NUM < 12 THEN
-                SELECT
-                    FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
-                    :NEW.COD_BLOQUE,
-                    :NEW.COD_APARTAMENTO,
-                    L_NUM + 1,
-                    LN_ANIO) INTO LS_ACTUAL
-                FROM
-                    DUAL;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_PENDIENTE = LS_ACTUAL
-                WHERE
-                    PERIODO_MES_CUENTA = LN_MES + 1;
-                EXIT;
-                COMMIT;
-            END IF;
-            EXIT WHEN L_NUM = 12;
-            L_NUM := L_NUM + 1;
-        END LOOP;
-    ELSIF LS_PENDIENTE = 0 AND LS_ACTUAL > 0 AND LN_MES > 1 THEN
-        DBMS_OUTPUT.PUT_LINE('ENTRÉ AL IF.');
-        L_NUM := LN_MES;
-        LOOP
-            SELECT
-                FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
-                :NEW.COD_BLOQUE,
-                :NEW.COD_APARTAMENTO,
-                L_NUM + 1,
-                LN_ANIO) INTO LS_PENDIENTE
-            FROM
-                DUAL;
-            IF LS_PENDIENTE > 0 AND L_NUM < 12 THEN
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_PENDIENTE = LS_ACTUAL
-                WHERE
-                    PERIODO_MES_CUENTA = LN_MES + 1;
-                EXIT;
-                COMMIT;
-            END IF;
-            EXIT WHEN L_NUM = 12;
-            L_NUM := L_NUM + 1;
-        END LOOP;
-    END IF;
-    COMMIT;
-END TR_SALDO_PAGADO;
-/
-
--------------------------
-
+------------------------------------------------------ Trigger para calcular el saldo pendiente de una cuenta de cobro
 CREATE OR REPLACE TRIGGER TR_SALDO_PENDIENTE BEFORE
-    INSERT ON CUENTA_COBRO FOR EACH ROW FOLLOWS TR_INIT_CUENTA
+    INSERT ON CUENTA_COBRO FOR EACH ROW
 DECLARE
     LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE := 0;
     PRAGMA AUTONOMOUS_TRANSACTION;

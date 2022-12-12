@@ -367,36 +367,176 @@ EXCEPTION
 END PR_CREAR_CUENTA_COBRO;
 /
 
--- Procedimiento que devuelve un listado de las personas asociadas a su apartamento.
-CREATE OR REPLACE FUNCTION FU_MOSTRAR_PERSONAS(
-    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+------------------------------------------------------ Procedimiento para pagar la cuenta de cobro (con saldo > 0) más antigua.
+CREATE OR REPLACE PROCEDURE PR_PAGAR_SALDO (
+    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
     PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
-    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE
-) RETURN GTR_PERSONA_APTO%ROWTYPE AS
+    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+    PV_SALDO IN PAGO.VALOR_PAGADO%TYPE
+) AS
+    LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
+    LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
+    LS_RESTANTE  CUENTA_COBRO.SALDO_ACTUAL%TYPE;
+    LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+    LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
+    LF_ACTUAL    PAGO.FECHA_PAGO%TYPE;
+    L_NUM        INTEGER;
+    L_NUM2       INTEGER;
 BEGIN
-    FOR LR_PERSONA_APTO IN (
-        SELECT
-            DISTINCT A.COD_APARTAMENTO,
-            A.COD_BLOQUE,
-            C.NOMBRE_CONJUNTO,
-            P.NOMBRE1_PERSONA,
-            P.APELLIDO1_PERSONA,
-            P.COD_PERSONA AS PERCOD,
-            A.COD_PERSONA AS APTCOD
-        FROM
-            APARTAMENTO A,
-            CONJUNTO C,
-            PERSONA P,
-            RESIDE R,
-            PERSONA_RESPONSABLE PR,
-            PERSONA_RESIDENTE PV
+    SELECT
+        MAX(PERIODO_MES_CUENTA),
+        MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
+        LN_ANIO
+    FROM
+        CUENTA_COBRO
+    WHERE
+        COD_CONJUNTO = PK_CONJUNTO
+        AND COD_BLOQUE = PK_BLOQUE
+        AND COD_APARTAMENTO = PK_APTO
+    GROUP BY
+        PERIODO_ANIO_CUENTA
+    ORDER BY
+        PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
+    SELECT
+        FU_CALC_V_PENDIENTE(PK_CONJUNTO,
+        PK_BLOQUE,
+        PK_APTO,
+        LN_MES,
+        LN_ANIO) INTO LS_PENDIENTE
+    FROM
+        DUAL;
+    SELECT
+        FU_CALC_V_ACTUAL(PK_CONJUNTO,
+        PK_BLOQUE,
+        PK_APTO,
+        LN_MES,
+        LN_ANIO) INTO LS_ACTUAL
+    FROM
+        DUAL;
+    IF LS_PENDIENTE <= 0 THEN
+        UPDATE CUENTA_COBRO
+        SET
+            SALDO_ACTUAL = LS_ACTUAL - (
+                PV_SALDO + LS_PENDIENTE
+            )
         WHERE
-            C.COD_CONJUNTO = A.COD_CONJUNTO
-            AND A.COD_APARTAMENTO = R.COD_APARTAMENTO
-            AND A.COD_BLOQUE = R.COD_BLOQUE
-            AND A.COD_CONJUNTO = R.COD_CONJUNTO
-            AND PV.COD_PERSONA = R.COD_PERSONA
-            AND A.COD_PERSONA = PR.COD_PERSONA;
-    ) LOOP
-    END LOOP;
+            COD_CONJUNTO = PK_CONJUNTO
+            AND COD_BLOQUE = PK_BLOQUE
+            AND COD_APARTAMENTO = PK_APTO
+            AND PERIODO_MES_CUENTA = LN_MES
+            AND PERIODO_ANIO_CUENTA = LN_ANIO;
+    ELSIF LS_PENDIENTE > 0 THEN
+        IF LN_MES > 1 THEN
+            L_NUM := LN_MES - 1;
+        ELSE
+            L_NUM := 12;
+            LN_ANIO := LN_ANIO - 1;
+        END IF;
+        LOOP
+            SELECT
+                FU_CALC_V_PENDIENTE(PK_CONJUNTO,
+                PK_BLOQUE,
+                PK_APTO,
+                L_NUM,
+                LN_ANIO) INTO LS_PENDIENTE
+            FROM
+                DUAL;
+            IF LS_PENDIENTE <= 0 THEN
+                SELECT
+                    FU_CALC_V_ACTUAL(PK_CONJUNTO,
+                    PK_BLOQUE,
+                    PK_APTO,
+                    L_NUM,
+                    LN_ANIO) INTO LS_ACTUAL
+                FROM
+                    DUAL;
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_ACTUAL = LS_ACTUAL - (
+                        PV_SALDO + LS_PENDIENTE
+                    )
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = L_NUM
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                IF L_NUM = 12 THEN
+                    L_NUM := 0;
+                    LN_ANIO := LN_ANIO + 1;
+                END IF;
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_PENDIENTE = LS_ACTUAL - (
+                        PV_SALDO + LS_PENDIENTE
+                    )
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = L_NUM +1
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                EXIT;
+            END IF;
+            IF L_NUM != 1 THEN
+                L_NUM := L_NUM -1;
+            ELSIF L_NUM = 1 THEN
+                L_NUM := 12;
+                LN_ANIO := LN_ANIO - 1;
+            END IF;
+        END LOOP;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001, 'PR_CALC_SALDOS Ha ocurrido un error: '
+            || SQLCODE
+            || SQLERRM);
+END PR_PAGAR_SALDO;
 /
+
+------------------------------------------------------ Procedimiento para recalcular los saldos pendientes de una cuenta de cobro.
+CREATE OR REPLACE PROCEDURE PR_SALDO_PENDIENTE (
+    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
+    PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
+    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+    PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
+    PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE
+)AS
+BEGIN
+    
+END PR_SALDO_PENDIENTE;
+/
+
+-- Procedimiento que devuelve un listado de las personas asociadas a su apartamento.
+-- CREATE OR REPLACE FUNCTION FU_MOSTRAR_PERSONAS(
+--     PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+--     PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
+--     PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE
+-- ) RETURN GTR_PERSONA_APTO%ROWTYPE AS
+-- BEGIN
+--     FOR LR_PERSONA_APTO IN (
+--         SELECT
+--             DISTINCT A.COD_APARTAMENTO,
+--             A.COD_BLOQUE,
+--             C.NOMBRE_CONJUNTO,
+--             P.NOMBRE1_PERSONA,
+--             P.APELLIDO1_PERSONA,
+--             P.COD_PERSONA AS PERCOD,
+--             A.COD_PERSONA AS APTCOD
+--         FROM
+--             APARTAMENTO A,
+--             CONJUNTO C,
+--             PERSONA P,
+--             RESIDE R,
+--             PERSONA_RESPONSABLE PR,
+--             PERSONA_RESIDENTE PV
+--         WHERE
+--             C.COD_CONJUNTO = A.COD_CONJUNTO
+--             AND A.COD_APARTAMENTO = R.COD_APARTAMENTO
+--             AND A.COD_BLOQUE = R.COD_BLOQUE
+--             AND A.COD_CONJUNTO = R.COD_CONJUNTO
+--             AND PV.COD_PERSONA = R.COD_PERSONA
+--             AND A.COD_PERSONA = PR.COD_PERSONA;
+--     ) LOOP
+--     END LOOP;
+-- /
