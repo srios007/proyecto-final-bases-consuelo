@@ -372,7 +372,7 @@ CREATE OR REPLACE PROCEDURE PR_PAGAR_SALDO (
     PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
     PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
     PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
-    PV_SALDO IN PAGO.VALOR_PAGADO%TYPE
+    PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE
 ) AS
     LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
     LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
@@ -417,7 +417,7 @@ BEGIN
         UPDATE CUENTA_COBRO
         SET
             SALDO_ACTUAL = LS_ACTUAL - (
-                PV_SALDO + LS_PENDIENTE
+                PV_PAGADO + LS_PENDIENTE
             )
         WHERE
             COD_CONJUNTO = PK_CONJUNTO
@@ -453,7 +453,7 @@ BEGIN
                 UPDATE CUENTA_COBRO
                 SET
                     SALDO_ACTUAL = LS_ACTUAL - (
-                        PV_SALDO + LS_PENDIENTE
+                        PV_PAGADO + LS_PENDIENTE
                     )
                 WHERE
                     COD_CONJUNTO = PK_CONJUNTO
@@ -468,7 +468,7 @@ BEGIN
                 UPDATE CUENTA_COBRO
                 SET
                     SALDO_PENDIENTE = LS_ACTUAL - (
-                        PV_SALDO + LS_PENDIENTE
+                        PV_PAGADO + LS_PENDIENTE
                     )
                 WHERE
                     COD_CONJUNTO = PK_CONJUNTO
