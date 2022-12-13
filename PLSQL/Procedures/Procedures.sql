@@ -49,9 +49,7 @@ BEGIN
             AND CC.PERIODO_MES_CUENTA = LN_MES
             AND CC.PERIODO_ANIO_CUENTA = LN_ANIO
     ) LOOP
-        IF R_SALDOS.DIA_OPORTUNO IS NULL THEN
-            NULL;
-        ELSIF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.VALOR_DESCUENTO = 0 AND R_SALDOS.VALOR_MORA > 0 THEN
+        IF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.VALOR_DESCUENTO = 0 AND R_SALDOS.VALOR_MORA > 0 THEN
             NULL;
         ELSIF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.VALOR_DESCUENTO > 0 AND R_SALDOS.VALOR_MORA = 0 THEN
             R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
@@ -381,7 +379,6 @@ CREATE OR REPLACE PROCEDURE PR_PAGAR_SALDO (
     LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
     LF_ACTUAL    PAGO.FECHA_PAGO%TYPE;
     L_NUM        INTEGER;
-    L_NUM2       INTEGER;
 BEGIN
     SELECT
         MAX(PERIODO_MES_CUENTA),
@@ -531,11 +528,43 @@ BEGIN
             FROM
                 CUENTA_COBRO
             WHERE
-                PERIODO_MES_CUENTA = LN_MES-1
+                PERIODO_MES_CUENTA = LN_MES - 1
                 AND PERIODO_ANIO_CUENTA = LN_ANIO;
         END IF;
         IF LS_PENDIENTE IS NULL THEN
             EXIT;
+        ELSIF LS_PENDIENTE < 0 THEN
+            UPDATE CUENTA_COBRO
+            SET
+                SALDO_PENDIENTE = 0,
+                SALDO_ACTUAL = SALDO_ACTUAL + LS_PENDIENTE
+            WHERE
+                COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO
+                AND PERIODO_MES_CUENTA = LN_MES
+                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+            IF LN_MES != 1 THEN
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_ACTUAL = 0
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = LN_MES - 1
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+            ELSE
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_ACTUAL = 0
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = 12
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO - 1;
+            END IF;
         ELSE
             UPDATE CUENTA_COBRO
             SET
@@ -556,37 +585,3 @@ BEGIN
     END LOOP;
 END PR_SALDO_PENDIENTE;
 /
-
--- Procedimiento que devuelve un listado de las personas asociadas a su apartamento.
--- CREATE OR REPLACE FUNCTION FU_MOSTRAR_PERSONAS(
---     PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
---     PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
---     PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE
--- ) RETURN GTR_PERSONA_APTO%ROWTYPE AS
--- BEGIN
---     FOR LR_PERSONA_APTO IN (
---         SELECT
---             DISTINCT A.COD_APARTAMENTO,
---             A.COD_BLOQUE,
---             C.NOMBRE_CONJUNTO,
---             P.NOMBRE1_PERSONA,
---             P.APELLIDO1_PERSONA,
---             P.COD_PERSONA AS PERCOD,
---             A.COD_PERSONA AS APTCOD
---         FROM
---             APARTAMENTO A,
---             CONJUNTO C,
---             PERSONA P,
---             RESIDE R,
---             PERSONA_RESPONSABLE PR,
---             PERSONA_RESIDENTE PV
---         WHERE
---             C.COD_CONJUNTO = A.COD_CONJUNTO
---             AND A.COD_APARTAMENTO = R.COD_APARTAMENTO
---             AND A.COD_BLOQUE = R.COD_BLOQUE
---             AND A.COD_CONJUNTO = R.COD_CONJUNTO
---             AND PV.COD_PERSONA = R.COD_PERSONA
---             AND A.COD_PERSONA = PR.COD_PERSONA;
---     ) LOOP
---     END LOOP;
--- /
