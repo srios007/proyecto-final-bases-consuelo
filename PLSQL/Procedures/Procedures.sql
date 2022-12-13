@@ -1,169 +1,3 @@
------------------------------------------------------- Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
-CREATE OR REPLACE PROCEDURE PR_CALC_DESC_MORA (
-    PC_ERROR OUT INTEGER,
-    PM_ERROR OUT VARCHAR
-) IS
-    LN_DIA_ACTUAL     INTEGER;
-    LN_MES_ACTUAL     INTEGER;
-    LN_ANIO_ACTUAL    INTEGER;
-    LN_MES            CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
-    LN_ANIO           CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
-    LS_ACTUAL         CUENTA_COBRO.SALDO_ACTUAL%TYPE;
-    LV_MORA           CUENTA_COBRO.VALOR_MORA%TYPE;
-    LV_DESCUENTO      CUENTA_COBRO.VALOR_DESCUENTO%TYPE;
-    LK_CUENTA         CUENTA_COBRO.COD_CUENTA_COBRO%TYPE;
-    LE_INCONSISTENCIA EXCEPTION;
-BEGIN
-    FOR R_PERIODO IN (
-        SELECT
-            PERIODO_MES_CUENTA,
-            PERIODO_ANIO_CUENTA
-        FROM
-            CONJUNTO     C,
-            APARTAMENTO  A,
-            CUENTA_COBRO CC
-        WHERE
-            CC.COD_APARTAMENTO = A.COD_APARTAMENTO
-            AND CC.COD_BLOQUE = A.COD_BLOQUE
-            AND CC.COD_CONJUNTO = A.COD_CONJUNTO
-            AND A.COD_CONJUNTO = C.COD_CONJUNTO
-    ) LOOP
-        SELECT
-            EXTRACT(DAY
-        FROM
-            CURRENT_DATE ),
-            EXTRACT(MONTH FROM CURRENT_DATE ),
-            EXTRACT(YEAR FROM CURRENT_DATE ) INTO LN_DIA_ACTUAL,
-            LN_MES_ACTUAL,
-            LN_ANIO_ACTUAL
-        FROM
-            DUAL;
-        FOR R_SALDOS IN (
-            SELECT
-                C.COD_CONJUNTO,
-                C.VALOR_TASA_MORA,
-                C.VALOR_TASA_DESCUENTO,
-                C.DIA_OPORTUNO,
-                A.COD_BLOQUE,
-                A.COD_APARTAMENTO,
-                CC.COD_CUENTA_COBRO,
-                CC.SALDO_ACTUAL,
-                CC.SALDO_PENDIENTE,
-                CC.VALOR_DESCUENTO,
-                CC.VALOR_MORA,
-                CC.PERIODO_MES_CUENTA,
-                CC.PERIODO_ANIO_CUENTA
-            FROM
-                CONJUNTO     C,
-                APARTAMENTO  A,
-                CUENTA_COBRO CC
-            WHERE
-                CC.COD_APARTAMENTO = A.COD_APARTAMENTO
-                AND CC.COD_BLOQUE = A.COD_BLOQUE
-                AND CC.COD_CONJUNTO = A.COD_CONJUNTO
-                AND A.COD_CONJUNTO = C.COD_CONJUNTO
-                AND CC.PERIODO_MES_CUENTA = R_PERIODO.PERIODO_MES_CUENTA
-                AND CC.PERIODO_ANIO_CUENTA = R_PERIODO.PERIODO_ANIO_CUENTA
-        ) LOOP
-            IF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_MORA = 0 THEN
-                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
-                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
-                    END IF;
-                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
-                    UPDATE CUENTA_COBRO
-                    SET
-                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                        VALOR_MORA = LV_MORA,
-                        ESTADO_CUENTA = 'En mora'
-                    WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
-                END IF;
-                COMMIT;
-            ELSIF R_SALDOS.PERIODO_MES_CUENTA < LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA <= LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_MORA = 0 THEN
-                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
-                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
-                    END IF;
-                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
-                    UPDATE CUENTA_COBRO
-                    SET
-                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                        VALOR_MORA = LV_MORA,
-                        ESTADO_CUENTA = 'En mora'
-                    WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
-                END IF;
-                COMMIT;
-            ELSIF R_SALDOS.DIA_OPORTUNO >= LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
-                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
-                    UPDATE CUENTA_COBRO
-                    SET
-                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                        VALOR_DESCUENTO = LV_DESCUENTO,
-                        ESTADO_CUENTA = 'Pendiente'
-                    WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
-                END IF;
-                COMMIT;
-            ELSIF R_SALDOS.PERIODO_MES_CUENTA > LN_MES_ACTUAL OR R_SALDOS.PERIODO_ANIO_CUENTA > LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
-                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
-                    UPDATE CUENTA_COBRO
-                    SET
-                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                        VALOR_DESCUENTO = LV_DESCUENTO,
-                        ESTADO_CUENTA = 'Pendiente'
-                    WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
-                END IF;
-                COMMIT;
-            ELSE
-                LK_CUENTA := R_SALDOS.COD_CUENTA_COBRO;
-                ROLLBACK;
-                RAISE LE_INCONSISTENCIA;
-            END IF;
- -- IF R_SALDOS.SALDO_ACTUAL = 0 AND R_SALDOS.SALDO_PENDIENTE = 0 THEN
- --     UPDATE CUENTA_COBRO
- --     SET
- --         VALOR_MORA = 0,
- --         VALOR_DESCUENTO = 0,
- --         ESTADO_CUENTA = 'Pagado'
- --     WHERE
- --         COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
- --     COMMIT;
- -- END IF;
-            PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
-        END LOOP;
-    END LOOP;
-EXCEPTION
-    WHEN LE_INCONSISTENCIA THEN
-        PC_ERROR := 1;
-        PM_ERROR := 'Hay inconsistencias en la cuenta de cobro código '
-            || LK_CUENTA;
-    WHEN OTHERS THEN
-        PC_ERROR := 1;
-        PM_ERROR := 'Error en el cálculo de descuento/mora en el saldo actual de una cuenta de cobro.';
-        RAISE_APPLICATION_ERROR(-20001, 'PR_CALC_DESC_MORA Ha ocurrido un error: '
-            || SQLCODE
-            || SQLERRM);
-END PR_CALC_DESC_MORA;
-/
-
--- Bloque anónimo para llamar al procedimiento PR_CALC_DESC_MORA
-DECLARE
-    LC_ERROR INTEGER;
-    LM_ERROR VARCHAR(100);
-BEGIN
-    PR_CALC_DESC_MORA(LC_ERROR, LM_ERROR);
-END;
-/
-
 ------------------------------------------------------ Procedimiento que retorna el valor a pagar de un apartamento dado
 CREATE OR REPLACE PROCEDURE PR_CALC_PAGO (
     PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
@@ -222,7 +56,7 @@ DECLARE
     LK_APTO      APARTAMENTO.COD_APARTAMENTO%TYPE := '402';
     LK_BLOQUE    APARTAMENTO.COD_BLOQUE%TYPE := '11';
     LK_CONJUNTO  CONJUNTO.COD_CONJUNTO%TYPE := 1;
-    LF_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE := 9;
+    LF_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE := 12;
     LF_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE := 2022;
     LV_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
     LV_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
@@ -274,9 +108,10 @@ BEGIN
             PAGO
         WHERE
             COD_CUENTA_COBRO = LK_CUENTA;
-        LK_PAGO := LK_PAGO + 1;
         IF LK_PAGO IS NULL THEN
             LK_PAGO := 1;
+        ELSE
+            LK_PAGO := LK_PAGO + 1;
         END IF;
     END IF;
     INSERT INTO PAGO (
@@ -303,7 +138,8 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN
         PC_ERROR := 1;
-        PM_ERROR := 'PR_PAGAR_CUENTA "OTHERS" raised';
+        PM_ERROR := 'Error al pagar la cuenta de cobro '
+            || LK_CUENTA;
         RAISE_APPLICATION_ERROR(-20001, 'PR_PAGAR_CUENTA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
@@ -349,18 +185,21 @@ BEGIN
     ELSE
         LK_RESERVA := LK_RESERVA + 1;
     END IF;
+    DBMS_OUTPUT.PUT_LINE(LK_RESERVA);
     SELECT
         COD_CONJUNTO INTO LK_CONJUNTO
     FROM
         CONJUNTO
     WHERE
         NOMBRE_CONJUNTO = PN_CONJUNTO;
+    DBMS_OUTPUT.PUT_LINE(LK_CONJUNTO);
     SELECT
         COD_PERSONA INTO LK_PERSONA
     FROM
         PERSONA
     WHERE
         IDENTIFICACION_PERSONA = PID_PERSONA;
+    DBMS_OUTPUT.PUT_LINE(LK_PERSONA);
     SELECT
         CURRENT_TIMESTAMP INTO LF_ACTUAL
     FROM
@@ -389,14 +228,41 @@ BEGIN
         'S',
         0
     );
+    COMMIT;
 EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        PC_ERROR := 1;
+        PM_ERROR := 'No hay filas retornadas por una consulta al crear la reserva.';
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20002, 'PR_CREAR_RESERVA Sin filas retornadas ');
+    WHEN TOO_MANY_ROWS THEN
+        PC_ERROR := 1;
+        PM_ERROR := 'Demasiadas filas retornadas por una consulta al crear la reserva.';
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20002, 'PR_CREAR_RESERVA Demasiadas filas retornadas ');
     WHEN OTHERS THEN
         PC_ERROR := 1;
-        PM_ERROR := 'PR_CREAR_RESERVA "OTHERS" raised';
+        PM_ERROR := 'Error al crear la reserva '
+            || LK_RESERVA;
+        ROLLBACK;
         RAISE_APPLICATION_ERROR(-20001, 'PR_CREAR_RESERVA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
 END PR_CREAR_RESERVA;
+/
+
+------------------------------------------------------ Bloque anónimo para llamar al procedimiento PR_CREAR_RESERVA
+DECLARE
+    ID_PERSONA      PERSONA.IDENTIFICACION_PERSONA%TYPE := 1010010101;
+    K_ZONA_CONJUNTO ZONA_CONJUNTO.COD_ZONA_CONJUNTO%TYPE := 2;
+    N_CONJUNTO      CONJUNTO.NOMBRE_CONJUNTO%TYPE := 'Torres de Cantabria';
+    F_INICIAL       RESERVA.FECHA_INICIAL%TYPE := TO_DATE('26/12/2022 15:00', 'DD/MM/YYYY HH24:MI');
+    F_FINAL         RESERVA.FECHA_FINAL%TYPE := TO_DATE('26/12/2022 20:00', 'DD/MM/YYYY HH24:MI');
+    C_ERROR         INTEGER;
+    M_ERROR         VARCHAR(150);
+BEGIN
+    PR_CREAR_RESERVA(ID_PERSONA, K_ZONA_CONJUNTO, N_CONJUNTO, F_INICIAL, F_FINAL, C_ERROR, M_ERROR);
+END;
 /
 
 ------------------------------------------------------ Procedimiento para crear la cuenta de cobro de un apartamento dado
@@ -772,4 +638,162 @@ EXCEPTION
             || SQLCODE
             || SQLERRM);
 END PR_INIT_SALDOS;
+/
+
+
+------------------------------------------------------ Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
+CREATE OR REPLACE PROCEDURE PR_CALC_DESC_MORA (
+    PC_ERROR OUT INTEGER,
+    PM_ERROR OUT VARCHAR
+) IS
+    LN_DIA_ACTUAL     INTEGER;
+    LN_MES_ACTUAL     INTEGER;
+    LN_ANIO_ACTUAL    INTEGER;
+    LN_MES            CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+    LN_ANIO           CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
+    LS_ACTUAL         CUENTA_COBRO.SALDO_ACTUAL%TYPE;
+    LV_MORA           CUENTA_COBRO.VALOR_MORA%TYPE;
+    LV_DESCUENTO      CUENTA_COBRO.VALOR_DESCUENTO%TYPE;
+    LK_CUENTA         CUENTA_COBRO.COD_CUENTA_COBRO%TYPE;
+    LE_INCONSISTENCIA EXCEPTION;
+BEGIN
+    FOR R_PERIODO IN (
+        SELECT
+            PERIODO_MES_CUENTA,
+            PERIODO_ANIO_CUENTA
+        FROM
+            CONJUNTO     C,
+            APARTAMENTO  A,
+            CUENTA_COBRO CC
+        WHERE
+            CC.COD_APARTAMENTO = A.COD_APARTAMENTO
+            AND CC.COD_BLOQUE = A.COD_BLOQUE
+            AND CC.COD_CONJUNTO = A.COD_CONJUNTO
+            AND A.COD_CONJUNTO = C.COD_CONJUNTO
+    ) LOOP
+        SELECT
+            EXTRACT(DAY
+        FROM
+            CURRENT_DATE ),
+            EXTRACT(MONTH FROM CURRENT_DATE ),
+            EXTRACT(YEAR FROM CURRENT_DATE ) INTO LN_DIA_ACTUAL,
+            LN_MES_ACTUAL,
+            LN_ANIO_ACTUAL
+        FROM
+            DUAL;
+        FOR R_SALDOS IN (
+            SELECT
+                C.COD_CONJUNTO,
+                C.VALOR_TASA_MORA,
+                C.VALOR_TASA_DESCUENTO,
+                C.DIA_OPORTUNO,
+                A.COD_BLOQUE,
+                A.COD_APARTAMENTO,
+                CC.COD_CUENTA_COBRO,
+                CC.SALDO_ACTUAL,
+                CC.SALDO_PENDIENTE,
+                CC.VALOR_DESCUENTO,
+                CC.VALOR_MORA,
+                CC.PERIODO_MES_CUENTA,
+                CC.PERIODO_ANIO_CUENTA
+            FROM
+                CONJUNTO     C,
+                APARTAMENTO  A,
+                CUENTA_COBRO CC
+            WHERE
+                CC.COD_APARTAMENTO = A.COD_APARTAMENTO
+                AND CC.COD_BLOQUE = A.COD_BLOQUE
+                AND CC.COD_CONJUNTO = A.COD_CONJUNTO
+                AND A.COD_CONJUNTO = C.COD_CONJUNTO
+                AND CC.PERIODO_MES_CUENTA = R_PERIODO.PERIODO_MES_CUENTA
+                AND CC.PERIODO_ANIO_CUENTA = R_PERIODO.PERIODO_ANIO_CUENTA
+        ) LOOP
+            IF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
+                IF R_SALDOS.VALOR_MORA = 0 THEN
+                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
+                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                    END IF;
+                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_MORA = LV_MORA,
+                        ESTADO_CUENTA = 'En mora'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                END IF;
+                COMMIT;
+            ELSIF R_SALDOS.PERIODO_MES_CUENTA < LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA <= LN_ANIO_ACTUAL THEN
+                IF R_SALDOS.VALOR_MORA = 0 THEN
+                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
+                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                    END IF;
+                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_MORA = LV_MORA,
+                        ESTADO_CUENTA = 'En mora'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                END IF;
+                COMMIT;
+            ELSIF R_SALDOS.DIA_OPORTUNO >= LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
+                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
+                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_DESCUENTO = LV_DESCUENTO,
+                        ESTADO_CUENTA = 'Pendiente'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                END IF;
+                COMMIT;
+            ELSIF R_SALDOS.PERIODO_MES_CUENTA > LN_MES_ACTUAL OR R_SALDOS.PERIODO_ANIO_CUENTA > LN_ANIO_ACTUAL THEN
+                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
+                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_DESCUENTO = LV_DESCUENTO,
+                        ESTADO_CUENTA = 'Pendiente'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                END IF;
+                COMMIT;
+            ELSE
+                LK_CUENTA := R_SALDOS.COD_CUENTA_COBRO;
+                ROLLBACK;
+                RAISE LE_INCONSISTENCIA;
+            END IF;
+ -- IF R_SALDOS.SALDO_ACTUAL = 0 AND R_SALDOS.SALDO_PENDIENTE = 0 THEN
+ --     UPDATE CUENTA_COBRO
+ --     SET
+ --         VALOR_MORA = 0,
+ --         VALOR_DESCUENTO = 0,
+ --         ESTADO_CUENTA = 'Pagado'
+ --     WHERE
+ --         COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+ --     COMMIT;
+ -- END IF;
+            PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
+        END LOOP;
+    END LOOP;
+EXCEPTION
+    WHEN LE_INCONSISTENCIA THEN
+        PC_ERROR := 1;
+        PM_ERROR := 'Hay inconsistencias en la cuenta de cobro código '
+            || LK_CUENTA;
+    WHEN OTHERS THEN
+        PC_ERROR := 1;
+        PM_ERROR := 'Error en el cálculo de descuento/mora en el saldo actual de una cuenta de cobro.';
+        RAISE_APPLICATION_ERROR(-20001, 'PR_CALC_DESC_MORA Ha ocurrido un error: '
+            || SQLCODE
+            || SQLERRM);
+END PR_CALC_DESC_MORA;
 /
