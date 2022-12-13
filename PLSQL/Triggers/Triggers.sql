@@ -17,7 +17,7 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001, 'TR_CALC_TOTAL_RESERVA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
-END;
+END TR_CALC_TOTAL_RESERVA;
 /
 
 ------------------------------------------------------ Trigger para actualizar el saldo de una cuenta de cobro dado un pago
@@ -30,7 +30,7 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001, 'TR_PAGO_CUENTA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
-END;
+END TR_PAGO_CUENTA;
 /
 
 ------------------------------------------------------ Trigger para calcular el saldo pendiente de una cuenta de cobro
@@ -68,7 +68,30 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001, 'TR_SALDO_PENDIENTE Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
-END;
+END TR_SALDO_PENDIENTE;
+/
+
+------------------------------------------------------ Trigger para hacer los cálculos correspondientes de la cuenta de cobro cuando hay un saldo a favor.
+CREATE OR REPLACE TRIGGER TR_SALDO_ACTUAL_A_FAVOR BEFORE
+    UPDATE OF SALDO_ACTUAL ON CUENTA_COBRO FOR EACH ROW
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    IF :OLD.SALDO_PENDIENTE < 0 THEN
+        :NEW.SALDO_ACTUAL := :NEW.SALDO_ACTUAL + :OLD.SALDO_PENDIENTE;
+        IF :NEW.SALDO_ACTUAL <= 0 THEN
+            :NEW.ESTADO_CUENTA := 'Pagado';
+        END IF;
+        :NEW.SALDO_PENDIENTE := 0;
+        PR_INIT_SALDOS(:NEW.COD_CONJUNTO, :NEW.COD_BLOQUE, :NEW.COD_APARTAMENTO, :NEW.PERIODO_MES_CUENTA - 1, :NEW.PERIODO_ANIO_CUENTA);
+    END IF;
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001, 'TR_SALDO_ACTUAL Ha ocurrido un error: '
+            || SQLCODE
+            || SQLERRM);
+END TR_SALDO_ACTUAL_A_FAVOR;
 /
 
 ------------------------------------------------------ Trigger para insertar los saldos por concepto en una cuenta
