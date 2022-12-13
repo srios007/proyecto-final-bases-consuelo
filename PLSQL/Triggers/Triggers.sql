@@ -71,28 +71,37 @@ EXCEPTION
 END TR_SALDO_PENDIENTE;
 /
 
------------------------------------------------------- Trigger para hacer los cálculos correspondientes de la cuenta de cobro cuando hay un saldo a favor.
--- CREATE OR REPLACE TRIGGER TR_SALDO_ACTUAL_A_FAVOR BEFORE
---     UPDATE OF SALDO_ACTUAL ON CUENTA_COBRO FOR EACH ROW
--- DECLARE
---     PRAGMA AUTONOMOUS_TRANSACTION;
--- BEGIN
---     IF :OLD.SALDO_PENDIENTE < 0 THEN
---         :NEW.SALDO_ACTUAL := :NEW.SALDO_ACTUAL + :OLD.SALDO_PENDIENTE;
---         IF :NEW.SALDO_ACTUAL <= 0 THEN
---             :NEW.ESTADO_CUENTA := 'Pagado';
---         END IF;
---         :NEW.SALDO_PENDIENTE := 0;
---         PR_INIT_SALDOS(:NEW.COD_CONJUNTO, :NEW.COD_BLOQUE, :NEW.COD_APARTAMENTO, :NEW.PERIODO_MES_CUENTA - 1, :NEW.PERIODO_ANIO_CUENTA);
---     END IF;
---     COMMIT;
--- EXCEPTION
---     WHEN OTHERS THEN
---         RAISE_APPLICATION_ERROR(-20001, 'TR_SALDO_ACTUAL_A_FAVOR Ha ocurrido un error: '
---             || SQLCODE
---             || SQLERRM);
--- END TR_SALDO_ACTUAL_A_FAVOR;
--- /
+------------------------------------------------------ Trigger para insertar el valor de administración del conjunto en el detalle de una cuenta de cobro.
+CREATE OR REPLACE TRIGGER TR_CONCEPTO_ADMIN BEFORE
+    INSERT OR UPDATE ON DETALLE_CONCEPTO FOR EACH ROW
+DECLARE
+    LV_ADMIN CONJUNTO.BASE_ADMINISTRACION%TYPE;
+    LC_ADMIN APARTAMENTO.COEF_ADMINISTRACION%TYPE;
+BEGIN
+    IF :NEW.COD_CONCEPTO = 1 THEN
+        SELECT
+            BASE_ADMINISTRACION,
+            COEF_ADMINISTRACION INTO LV_ADMIN,
+            LC_ADMIN
+        FROM
+            CONJUNTO     C,
+            APARTAMENTO  A,
+            CUENTA_COBRO CC
+        WHERE
+            CC.COD_APARTAMENTO = A.COD_APARTAMENTO
+            AND CC.COD_BLOQUE = A.COD_BLOQUE
+            AND CC.COD_CONJUNTO = A.COD_CONJUNTO
+            AND A.COD_CONJUNTO = C.COD_CONJUNTO
+            AND CC.COD_CUENTA_COBRO = :NEW.COD_CUENTA_COBRO;
+        :NEW.PRECIO_CONCEPTO_CUENTA := LV_ADMIN + (LV_ADMIN * (LC_ADMIN / 100));
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001, 'TR_CONCEPTO_ADMIN Ha ocurrido un error: '
+            || SQLCODE
+            || SQLERRM);
+END;
+/
 
 ------------------------------------------------------ Trigger para insertar los saldos por concepto en una cuenta
 CREATE OR REPLACE TRIGGER TR_CONCEPTO_CUENTA BEFORE
@@ -144,38 +153,6 @@ BEGIN
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(-20001, 'TR_CONCEPTO_CUENTA Ha ocurrido un error: '
-            || SQLCODE
-            || SQLERRM);
-END;
-/
-
------------------------------------------------------- Trigger para insertar el valor de administración del conjunto en el detalle de una cuenta de cobro.
-CREATE OR REPLACE TRIGGER TR_CONCEPTO_ADMIN BEFORE
-    INSERT OR UPDATE ON DETALLE_CONCEPTO FOR EACH ROW
-DECLARE
-    LV_ADMIN CONJUNTO.BASE_ADMINISTRACION%TYPE;
-    LC_ADMIN APARTAMENTO.COEF_ADMINISTRACION%TYPE;
-BEGIN
-    IF :NEW.COD_CONCEPTO = 1 THEN
-        SELECT
-            BASE_ADMINISTRACION,
-            COEF_ADMINISTRACION INTO LV_ADMIN,
-            LC_ADMIN
-        FROM
-            CONJUNTO     C,
-            APARTAMENTO  A,
-            CUENTA_COBRO CC
-        WHERE
-            CC.COD_APARTAMENTO = A.COD_APARTAMENTO
-            AND CC.COD_BLOQUE = A.COD_BLOQUE
-            AND CC.COD_CONJUNTO = A.COD_CONJUNTO
-            AND A.COD_CONJUNTO = C.COD_CONJUNTO
-            AND CC.COD_CUENTA_COBRO = :NEW.COD_CUENTA_COBRO;
-        :NEW.PRECIO_CONCEPTO_CUENTA := LV_ADMIN + (LV_ADMIN * (LC_ADMIN / 100));
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20001, 'TR_CONCEPTO_ADMIN Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
 END;
