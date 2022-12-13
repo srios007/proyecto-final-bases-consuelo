@@ -1,6 +1,6 @@
 ------------------------------------------------------ Trigger para calcular el costo total de una reserva
 CREATE OR REPLACE TRIGGER TR_CALC_TOTAL_RESERVA BEFORE
-    INSERT OR UPDATE ON RESERVA FOR EACH ROW FOLLOWS TR_CALC_HORAS_RESERVA
+    INSERT OR UPDATE ON RESERVA FOR EACH ROW
 DECLARE
     LV_COSTO ZONA_CONJUNTO.COSTO_ZONA%TYPE;
 BEGIN
@@ -31,121 +31,7 @@ DECLARE
     LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
     L_NUM        INTEGER;
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('TR_PAGO_CUENTA');
     PR_PAGAR_SALDO(:NEW.COD_CONJUNTO, :NEW.COD_BLOQUE, :NEW.COD_APARTAMENTO, :NEW.VALOR_PAGADO);
- -- UPDATE CUENTA_COBRO
- -- SET
- --     SALDO_ACTUAL = :NEW.VALOR_PAGADO
- -- WHERE
- --     COD_CONJUNTO = :NEW.COD_CONJUNTO
- --     AND COD_BLOQUE = :NEW.COD_BLOQUE
- --     AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
- -- SELECT
- --     MAX(PERIODO_MES_CUENTA),
- --     MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
- --     LN_ANIO
- -- FROM
- --     CUENTA_COBRO
- -- WHERE
- --     COD_CONJUNTO = :NEW.COD_CONJUNTO
- --     AND COD_BLOQUE = :NEW.COD_BLOQUE
- --     AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO
- -- GROUP BY
- --     PERIODO_ANIO_CUENTA
- -- ORDER BY
- --     PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
- -- SELECT
- --     FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
- --     :NEW.COD_BLOQUE,
- --     :NEW.COD_APARTAMENTO,
- --     LN_MES,
- --     LN_ANIO) INTO LS_ACTUAL
- -- FROM
- --     DUAL;
- -- SELECT
- --     FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
- --     :NEW.COD_BLOQUE,
- --     :NEW.COD_APARTAMENTO,
- --     LN_MES,
- --     LN_ANIO) INTO LS_PENDIENTE
- -- FROM
- --     DUAL;
- -- IF LS_PENDIENTE > 0 THEN
- --     L_NUM := LN_MES;
- --     LOOP
- --         SELECT
- --             FU_CALC_V_PENDIENTE(:NEW.COD_CONJUNTO,
- --             :NEW.COD_BLOQUE,
- --             :NEW.COD_APARTAMENTO,
- --             L_NUM,
- --             LN_ANIO) INTO LS_PENDIENTE
- --         FROM
- --             DUAL;
- --         IF LS_PENDIENTE = 0 THEN
- --             LN_MES := L_NUM;
- --             SELECT
- --                 FU_CALC_V_ACTUAL(:NEW.COD_CONJUNTO,
- --                 :NEW.COD_BLOQUE,
- --                 :NEW.COD_APARTAMENTO,
- --                 LN_MES,
- --                 LN_ANIO) INTO LS_ACTUAL
- --             FROM
- --                 DUAL;
- --             EXIT;
- --         END IF;
- --         IF L_NUM = 1 THEN
- --             LN_ANIO := LN_ANIO - 1;
- --             LN_MES := 12;
- --             L_NUM := LN_MES;
- --         END IF;
- --         EXIT WHEN L_NUM = 1;
- --         L_NUM := L_NUM - 1;
- --     END LOOP;
- --     IF LS_PENDIENTE < :NEW.VALOR_PAGADO THEN
- --         LS_RESTANTE := :NEW.VALOR_PAGADO - LS_PENDIENTE;
- --         UPDATE CUENTA_COBRO
- --         SET
- --             SALDO_PENDIENTE = 0,
- --             SALDO_ACTUAL = LS_ACTUAL - LS_RESTANTE
- --         WHERE
- --             PERIODO_MES_CUENTA = LN_MES
- --             AND PERIODO_ANIO_CUENTA = LN_ANIO
- --             AND COD_CONJUNTO = :NEW.COD_CONJUNTO
- --             AND COD_BLOQUE = :NEW.COD_BLOQUE
- --             AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
- --         IF LS_ACTUAL <= 0 THEN
- --             UPDATE CUENTA_COBRO
- --             SET
- --                 ESTADO_CUENTA = 'Pagado'
- --             WHERE
- --                 PERIODO_MES_CUENTA = LN_MES
- --                 AND PERIODO_ANIO_CUENTA = LN_ANIO
- --                 AND COD_CONJUNTO = :NEW.COD_CONJUNTO
- --                 AND COD_BLOQUE = :NEW.COD_BLOQUE
- --                 AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
- --         END IF;
- --     ELSE
- --         UPDATE CUENTA_COBRO
- --         SET
- --             SALDO_PENDIENTE = LS_PENDIENTE - :NEW.VALOR_PAGADO
- --         WHERE
- --             PERIODO_MES_CUENTA = LN_MES
- --             AND PERIODO_ANIO_CUENTA = LN_ANIO
- --             AND COD_CONJUNTO = :NEW.COD_CONJUNTO
- --             AND COD_BLOQUE = :NEW.COD_BLOQUE
- --             AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
- --     END IF;
- -- ELSE
- --     UPDATE CUENTA_COBRO
- --     SET
- --         SALDO_PENDIENTE = LS_ACTUAL - :NEW.VALOR_PAGADO
- --     WHERE
- --         PERIODO_MES_CUENTA = LN_MES
- --         AND PERIODO_ANIO_CUENTA = LN_ANIO
- --         AND COD_CONJUNTO = :NEW.COD_CONJUNTO
- --         AND COD_BLOQUE = :NEW.COD_BLOQUE
- --         AND COD_APARTAMENTO = :NEW.COD_APARTAMENTO;
- -- END IF;
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(-20001, 'TR_PAGO_CUENTA Ha ocurrido un error: '
@@ -178,9 +64,10 @@ BEGIN
             PERIODO_MES_CUENTA = :NEW.PERIODO_MES_CUENTA-1
             AND PERIODO_ANIO_CUENTA = :NEW.PERIODO_ANIO_CUENTA;
     END IF;
-    :NEW.SALDO_PENDIENTE := LS_PENDIENTE;
     IF LS_PENDIENTE IS NULL THEN
         :NEW.SALDO_PENDIENTE := 0;
+    ELSE
+        :NEW.SALDO_PENDIENTE := LS_PENDIENTE;
     END IF;
     COMMIT;
 EXCEPTION
@@ -190,20 +77,6 @@ EXCEPTION
             || SQLERRM);
 END;
 /
-
--- CREATE OR REPLACE TRIGGER TR_SALDO_ACTUAL BEFORE
---     UPDATE ON CUENTA_COBRO FOR EACH ROW FOLLOWS TR_SALDO_PENDIENTE
--- DECLARE
---     PRAGMA AUTONOMOUS_TRANSACTION;
--- BEGIN
---     UPDATE CUENTA_COBRO
---     SET
---         SALDO_PENDIENTE = :NEW.SALDO_ACTUAL
---     WHERE
---         PERIODO_MES_CUENTA = :NEW.PERIODO_MES_CUENTA + 1;
---     COMMIT;
--- END TR_SALDO_ACTUAL;
--- /
 
 ------------------------------------------------------ Trigger para insertar los saldos por concepto en una cuenta
 CREATE OR REPLACE TRIGGER TR_CONCEPTO_CUENTA BEFORE
@@ -262,73 +135,3 @@ EXCEPTION
             || SQLERRM);
 END;
 /
-
--- CREATE OR REPLACE FUNCTION FU_SALDO_PENDIENTE (
---     PN_PERIODO_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
---     PN_PERIODO_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE
--- ) RETURN CUENTA_COBRO.SALDO_PENDIENTE%TYPE AS
---     LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
--- BEGIN
---     SELECT
---         SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
---     FROM
---         CUENTA_COBRO
---     WHERE
---         TO_DATE('01'
---             || TO_CHAR(PERIODO_MES_CUENTA,
---         '99')
---             || TO_CHAR(PERIODO_ANIO_CUENTA,
---         '9999'),
---         'DD,MM,YYYY') < TO_DATE('01'
---             || TO_CHAR(PN_PERIODO_MES,
---         '99')
---             || TO_CHAR(PN_PERIODO_ANIO,
---         '9999'),
---         'DD,MM,YYYY');
---     RETURN LS_PENDIENTE;
--- END FU_SALDO_PENDIENTE;
--- /
-
------------------------------------------------------- Trigger para inicializar una cuenta de cobro al ser creada
--- CREATE OR REPLACE TRIGGER TR_INIT_CUENTA BEFORE
---     INSERT ON CUENTA_COBRO FOR EACH ROW
--- DECLARE
---     LF_ACTUAL DATE;
---     PRAGMA AUTONOMOUS_TRANSACTION;
--- BEGIN
---     SELECT
---         CURRENT_DATE INTO LF_ACTUAL
---     FROM
---         DUAL;
---     :NEW.SALDO_ACTUAL := 0;
---     :NEW.SALDO_PENDIENTE := 0;
---     :NEW.FECHA_CUENTA := LF_ACTUAL;
---     COMMIT;
--- EXCEPTION
---     WHEN OTHERS THEN
---         RAISE_APPLICATION_ERROR(-20001, 'TR_INIT_CUENTA Ha ocurrido un error: '
---             || SQLCODE
---             || SQLERRM);
--- END;
--- /
-
------------------------------------------------------- Trigger para calcular el número de horas de una reserva
--- CREATE OR REPLACE TRIGGER TR_CALC_HORAS_RESERVA BEFORE
---     INSERT OR UPDATE ON RESERVA FOR EACH ROW
--- DECLARE
---     LE_CKFAILED EXCEPTION;
--- BEGIN
---     IF EXTRACT(DAY FROM :NEW.FECHA_INICIAL) = EXTRACT(DAY FROM :NEW.FECHA_FINAL) AND EXTRACT(MONTH FROM :NEW.FECHA_INICIAL) = EXTRACT(MONTH FROM :NEW.FECHA_FINAL) AND EXTRACT(YEAR FROM :NEW.FECHA_INICIAL) = EXTRACT(YEAR FROM :NEW.FECHA_FINAL) AND :NEW.FECHA_INICIAL < :NEW.FECHA_FINAL THEN
---         :NEW.NUM_HORAS_RESERVADAS := EXTRACT(HOUR FROM (:NEW.FECHA_FINAL - :NEW.FECHA_INICIAL));
---     ELSE
---         RAISE LE_CKFAILED;
---     END IF;
--- EXCEPTION
---     WHEN LE_CKFAILED THEN
---         RAISE_APPLICATION_ERROR(-20001, 'Fechas de reserva invílidas.');
---     WHEN OTHERS THEN
---         RAISE_APPLICATION_ERROR(-20001, 'TR_CALC_HORAS_RESERVA Ha ocurrido un error: '
---             || SQLCODE
---             || SQLERRM);
--- END;
--- /
