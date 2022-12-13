@@ -1,12 +1,13 @@
 # Proyecto final bases de datos
 
 * Christian Caro Vargas - 20181020027
+* Edwin Hernández Cabrera - 20152020013
 * Juan Sebastián González Forero - 20181020029
 * Santiago Ríos Valero - 20181020017
 
-En este proyecto se creo una página web en la cual se pueden administrar apartamentos. Para el desarrollo, se utilizaron las siguientes herramientas:
+Página web en la cual se pueden administrar apartamentos, cuentas de cobro y reservas de zonas comunes de un conjunto. Para el desarrollo, se utilizaron las siguientes herramientas:
 
-* Oracle XE Edition
+* Oracle XE
 * Express
 * React
 * Node
