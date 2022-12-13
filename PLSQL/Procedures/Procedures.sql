@@ -41,9 +41,12 @@ BEGIN
         FOR R_SALDOS IN (
             SELECT
                 CC.SALDO_ACTUAL,
+                C.COD_CONJUNTO,
                 C.VALOR_TASA_MORA,
                 C.VALOR_TASA_DESCUENTO,
                 C.DIA_OPORTUNO,
+                A.COD_BLOQUE,
+                A.COD_APARTAMENTO,
                 CC.COD_CUENTA_COBRO,
                 CC.VALOR_DESCUENTO,
                 CC.VALOR_MORA,
@@ -62,54 +65,66 @@ BEGIN
                 AND CC.PERIODO_ANIO_CUENTA = R_PERIODO.PERIODO_ANIO_CUENTA
         ) LOOP
             IF R_SALDOS.DIA_OPORTUNO < LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                IF R_SALDOS.VALOR_MORA = 0 THEN
+                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
+                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                    END IF;
+                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_MORA = LV_MORA,
+                        ESTADO_CUENTA = 'En mora'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                    PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
                 END IF;
-                LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
-                R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                    VALOR_MORA = LV_MORA,
-                    ESTADO_CUENTA = 'En mora'
-                WHERE
-                    COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
                 COMMIT;
             ELSIF R_SALDOS.PERIODO_MES_CUENTA < LN_MES_ACTUAL OR R_SALDOS.PERIODO_ANIO_CUENTA < LN_ANIO_ACTUAL THEN
-                IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
-                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                IF R_SALDOS.VALOR_MORA = 0 THEN
+                    IF R_SALDOS.VALOR_DESCUENTO > 0 THEN
+                        R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + ( R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100));
+                    END IF;
+                    LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_MORA = LV_MORA,
+                        ESTADO_CUENTA = 'En mora'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                    PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
                 END IF;
-                LV_MORA := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_MORA / 100);
-                R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL + LV_MORA;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                    VALOR_MORA = LV_MORA,
-                    ESTADO_CUENTA = 'En mora'
-                WHERE
-                    COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
                 COMMIT;
             ELSIF R_SALDOS.DIA_OPORTUNO >= LN_DIA_ACTUAL AND R_SALDOS.PERIODO_MES_CUENTA = LN_MES_ACTUAL AND R_SALDOS.PERIODO_ANIO_CUENTA = LN_ANIO_ACTUAL THEN
-                LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
-                R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                    VALOR_DESCUENTO = LV_DESCUENTO,
-                    ESTADO_CUENTA = 'Pendiente'
-                WHERE
-                    COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
+                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_DESCUENTO = LV_DESCUENTO,
+                        ESTADO_CUENTA = 'Pendiente'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                    PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
+                END IF;
                 COMMIT;
             ELSIF R_SALDOS.PERIODO_MES_CUENTA > LN_MES_ACTUAL OR R_SALDOS.PERIODO_ANIO_CUENTA > LN_ANIO_ACTUAL THEN
-                LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
-                R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
-                    VALOR_DESCUENTO = LV_DESCUENTO,
-                    ESTADO_CUENTA = 'Pendiente'
-                WHERE
-                    COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                IF R_SALDOS.VALOR_DESCUENTO = 0 THEN
+                    LV_DESCUENTO := R_SALDOS.SALDO_ACTUAL * (R_SALDOS.VALOR_TASA_DESCUENTO / 100);
+                    R_SALDOS.SALDO_ACTUAL := R_SALDOS.SALDO_ACTUAL - LV_DESCUENTO;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = R_SALDOS.SALDO_ACTUAL,
+                        VALOR_DESCUENTO = LV_DESCUENTO,
+                        ESTADO_CUENTA = 'Pendiente'
+                    WHERE
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                    PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA);
+                END IF;
                 COMMIT;
             ELSE
                 LK_CUENTA := R_SALDOS.COD_CUENTA_COBRO;
