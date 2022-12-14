@@ -505,7 +505,10 @@ BEGIN
                 CUENTA_COBRO
             WHERE
                 PERIODO_MES_CUENTA = 12
-                AND PERIODO_ANIO_CUENTA = LN_ANIO-1;
+                AND PERIODO_ANIO_CUENTA = LN_ANIO-1
+                AND COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO;
         ELSE
             SELECT
                 SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
@@ -513,7 +516,10 @@ BEGIN
                 CUENTA_COBRO
             WHERE
                 PERIODO_MES_CUENTA = LN_MES - 1
-                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                AND PERIODO_ANIO_CUENTA = LN_ANIO
+                AND COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO;
         END IF;
         IF LS_PENDIENTE IS NULL THEN
             EXIT;
@@ -637,7 +643,6 @@ EXCEPTION
 END PR_INIT_SALDOS;
 /
 
-
 ------------------------------------------------------ Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
 CREATE OR REPLACE PROCEDURE PR_CALC_DESC_MORA (
     PC_ERROR OUT INTEGER,
@@ -656,7 +661,7 @@ CREATE OR REPLACE PROCEDURE PR_CALC_DESC_MORA (
 BEGIN
     FOR R_PERIODO IN (
         SELECT
-            PERIODO_MES_CUENTA,
+            DISTINCT PERIODO_MES_CUENTA,
             PERIODO_ANIO_CUENTA
         FROM
             CONJUNTO     C,
@@ -747,7 +752,9 @@ BEGIN
                         VALOR_DESCUENTO = LV_DESCUENTO,
                         ESTADO_CUENTA = 'Pendiente'
                     WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO
+                        AND COD_APARTAMENTO = R_SALDOS.COD_APARTAMENTO
+                        AND COD_BLOQUE = R_SALDOS.COD_BLOQUE;
                 END IF;
                 COMMIT;
             ELSIF R_SALDOS.PERIODO_MES_CUENTA > LN_MES_ACTUAL OR R_SALDOS.PERIODO_ANIO_CUENTA > LN_ANIO_ACTUAL THEN
@@ -760,7 +767,9 @@ BEGIN
                         VALOR_DESCUENTO = LV_DESCUENTO,
                         ESTADO_CUENTA = 'Pendiente'
                     WHERE
-                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO;
+                        COD_CUENTA_COBRO = R_SALDOS.COD_CUENTA_COBRO
+                        AND COD_APARTAMENTO = R_SALDOS.COD_APARTAMENTO
+                        AND COD_BLOQUE = R_SALDOS.COD_BLOQUE;
                 END IF;
                 COMMIT;
             ELSE
