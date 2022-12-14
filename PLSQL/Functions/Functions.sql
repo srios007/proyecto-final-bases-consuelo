@@ -56,6 +56,45 @@ EXCEPTION
 END FU_CALC_V_PENDIENTE;
 /
 
+-- Función que devuelve un listado de los apartamentos con saldos pendientes
+CREATE OR REPLACE FUNCTION FU_APTOS_EN_MORA RETURN SYS_REFCURSOR AS
+    LR_APTOS_MORA SYS_REFCURSOR;
+BEGIN
+    OPEN SYS_REFCURSOR FOR
+        SELECT
+            C.NOMBRE_CONJUNTO,
+            A.COD_BLOQUE,
+            A.COD_APARTAMENTO,
+            MAX(CC.SALDO_PENDIENTE),
+            P.FECHA_PAGO
+        FROM
+            CONJUNTO     C,
+            APARTAMENTO  A,
+            CUENTA_COBRO CC,
+            PAGO         P
+        WHERE
+            C.COD_CONJUNTO = A.COD_CONJUNTO
+            AND A.COD_CONJUNTO = CC.COD_CONJUNTO
+            AND A.COD_BLOQUE = CC.COD_BLOQUE
+            AND A.COD_APARTAMENTO = CC.COD_APARTAMENTO
+            AND CC.SALDO_PENDIENTE > 0
+            AND A.COD_CONJUNTO = P.COD_CONJUNTO
+            AND A.COD_BLOQUE = P.COD_BLOQUE
+            AND A.COD_APARTAMENTO = P.COD_APARTAMENTO
+        GROUP BY
+            C.NOMBRE_CONJUNTO,
+            A.COD_BLOQUE,
+            A.COD_APARTAMENTO,
+            P.FECHA_PAGO;
+    RETURN FU_APTOS_EN_MORA;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE_APPLICATION_ERROR(-20001, 'FU_APTOS_EN_MORA Ha ocurrido un error: '
+            || SQLCODE
+            || SQLERRM);
+END FU_APTOS_EN_MORA;
+/
+
 -- Función que devuelve un listado de las personas asociadas a su apartamento.
 CREATE OR REPLACE FUNCTION FU_MOSTRAR_PERSONAS(
     PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
