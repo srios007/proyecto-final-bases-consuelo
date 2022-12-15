@@ -28,13 +28,50 @@ DECLARE
     LM_ERROR VARCHAR(150);
 BEGIN
     PR_PAGAR_SALDO(:NEW.COD_CONJUNTO, :NEW.COD_BLOQUE, :NEW.COD_APARTAMENTO, :NEW.VALOR_PAGADO, LC_ERROR, LM_ERROR);
-    PR_AUDITORIA_PAGO(:NEW.COD_CUENTA_COBRO, :NEW.COD_PAGO, NULL, :NEW.VALOR_PAGADO, LC_ERROR, LM_ERROR);
+    PR_AUDITORIA_PAGO(:NEW.COD_CUENTA_COBRO, :NEW.COD_PAGO, 0, :NEW.VALOR_PAGADO, LC_ERROR, LM_ERROR);
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(-20001, 'TR_PAGO_CUENTA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
 END TR_PAGO_CUENTA;
+/
+
+------------------------------------------------------ Trigger para insertar los datos correspondientes de pago a la tabla de auditoria.
+CREATE OR REPLACE TRIGGER AUDIT_PAGO AFTER
+    UPDATE OR INSERT ON PAGO FOR EACH ROW
+DECLARE
+    LK_AUDIT AUDIT_CUENTAS.COD_AUDIT_CUENTAS%TYPE;
+BEGIN
+    SELECT
+        MAX(COD_AUDIT_CUENTAS) INTO LK_AUDIT
+    FROM
+        AUDIT_CUENTAS;
+    IF LK_AUDIT IS NULL THEN
+        LK_AUDIT := 1;
+    ELSE
+        LK_AUDIT := LK_AUDIT + 1;
+    END IF;
+    INSERT INTO AUDIT_CUENTAS (
+        COD_AUDIT_CUENTAS,
+        COD_CUENTA_COBRO,
+        COD_PAGO,
+        TABLA_MODIFICADA,
+        FECHA_MODIFICACION,
+        ESTADO_CUENTA,
+        VALOR_PAGADO,
+        USUARIO
+    ) VALUES (
+        LK_AUDIT,
+        :NEW.COD_CUENTA_COBRO,
+        :NEW.COD_PAGO,
+        'PAGO',
+        (SELECT CURRENT_TIMESTAMP FROM DUAL),
+        NULL,
+        :NEW.VALOR_PAGADO,
+        (SELECT USER FROM DUAL)
+    );
+END AUDIT_CUENTA;
 /
 
 ------------------------------------------------------ Trigger para calcular el saldo pendiente de una cuenta de cobro
@@ -73,13 +110,50 @@ BEGIN
     ELSE
         :NEW.SALDO_PENDIENTE := LS_PENDIENTE;
     END IF;
-    PR_AUDITORIA_PAGO(:NEW.COD_CUENTA_COBRO, NULL, :NEW.ESTADO_CUENTA, NULL, LC_ERROR, LM_ERROR);
+ -- PR_AUDITORIA_PAGO(:NEW.COD_CUENTA_COBRO, 0, :NEW.ESTADO_CUENTA, 0, LC_ERROR, LM_ERROR);
 EXCEPTION
     WHEN OTHERS THEN
         RAISE_APPLICATION_ERROR(-20001, 'TR_SALDO_PENDIENTE Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
 END TR_SALDO_PENDIENTE;
+/
+
+------------------------------------------------------ Trigger para insertar los datos correspondientes de la cuenta de cobro a la tabla de auditoria.
+CREATE OR REPLACE TRIGGER AUDIT_CUENTA AFTER
+    UPDATE OR INSERT ON CUENTA_COBRO FOR EACH ROW
+DECLARE
+    LK_AUDIT AUDIT_CUENTAS.COD_AUDIT_CUENTAS%TYPE;
+BEGIN
+    SELECT
+        MAX(COD_AUDIT_CUENTAS) INTO LK_AUDIT
+    FROM
+        AUDIT_CUENTAS;
+    IF LK_AUDIT IS NULL THEN
+        LK_AUDIT := 1;
+    ELSE
+        LK_AUDIT := LK_AUDIT + 1;
+    END IF;
+    INSERT INTO AUDIT_CUENTAS (
+        COD_AUDIT_CUENTAS,
+        COD_CUENTA_COBRO,
+        COD_PAGO,
+        TABLA_MODIFICADA,
+        FECHA_MODIFICACION,
+        ESTADO_CUENTA,
+        VALOR_PAGADO,
+        USUARIO
+    ) VALUES (
+        LK_AUDIT,
+        :NEW.COD_CUENTA_COBRO,
+        NULL,
+        'CUENTA_COBRO',
+        (SELECT CURRENT_TIMESTAMP FROM DUAL),
+        :NEW.ESTADO_CUENTA,
+        NULL,
+        (SELECT USER FROM DUAL)
+    );
+END AUDIT_CUENTA;
 /
 
 ------------------------------------------------------ Trigger para insertar el valor de administración del conjunto en el detalle de una cuenta de cobro.
