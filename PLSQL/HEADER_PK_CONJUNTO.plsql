@@ -8,8 +8,6 @@ Autores:
 
     Edwin Hernández Cabrera (20152020013)
 
-    José Luis Quintero Cañizalez (20181020061)
-
     Juan Sebastián González Forero (20181020029)
 
     Santiago Ríos Valero (20181020017) 
