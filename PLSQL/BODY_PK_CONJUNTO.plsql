@@ -338,7 +338,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
         PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE,
         PC_ERROR OUT INTEGER,
         PM_ERROR OUT VARCHAR
-    ) AS  -- Declaración de variables locales
+    ) AS -- Declaración de variables locales
         LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
         LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
         LS_RESTANTE  CUENTA_COBRO.SALDO_ACTUAL%TYPE;
@@ -403,7 +403,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
                 AND COD_APARTAMENTO = PK_APTO
                 AND PERIODO_MES_CUENTA = LN_MES
                 AND PERIODO_ANIO_CUENTA = LN_ANIO;
-            PR_INIT_SALDOS (PK_CONJUNTO, PK_BLOQUE, PK_APTO, LN_MES - 1, LN_ANIO,PC_ERROR,PM_ERROR);
+            PR_INIT_SALDOS (PK_CONJUNTO, PK_BLOQUE, PK_APTO, LN_MES - 1, LN_ANIO, PC_ERROR, PM_ERROR);
         ELSIF LS_PENDIENTE > 0 THEN
             IF LN_MES > 1 THEN
                 L_NUM := LN_MES - 1;
@@ -455,7 +455,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
                         AND COD_APARTAMENTO = PK_APTO
                         AND PERIODO_MES_CUENTA = L_NUM + 1
                         AND PERIODO_ANIO_CUENTA = LN_ANIO;
-                    PR_SALDO_PENDIENTE(PK_CONJUNTO, PK_BLOQUE, PK_APTO, L_NUM, LN_ANIO ,PC_ERROR,PM_ERROR);
+                    PR_SALDO_PENDIENTE(PK_CONJUNTO, PK_BLOQUE, PK_APTO, L_NUM, LN_ANIO, PC_ERROR, PM_ERROR);
                     EXIT;
                 END IF;
                 IF L_NUM != 1 THEN
@@ -473,8 +473,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
             RAISE_APPLICATION_ERROR(-20001, 'PR_PAGAR_SALDO Ha ocurrido un error: '
                 || SQLCODE
                 || SQLERRM);
-    END PR_PAGAR_SALDO;
- /*-----------------------------------------------------------------------------------
+    END PR_PAGAR_SALDO; /*-----------------------------------------------------------------------------------
 Procedimiento para recalcular los saldos pendientes de una cuenta de cobro.
 Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
                         PK_BLOQUE       Código del bloque de apartamentos
@@ -491,7 +490,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
         PC_ERROR OUT INTEGER,
         PM_ERROR OUT VARCHAR
     )AS
-    -- Declaración de variables locales
+ -- Declaración de variables locales
         LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE := 0;
         LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
         LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
@@ -584,14 +583,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
             RAISE_APPLICATION_ERROR(-20001, 'PR_SALDO_PENDIENTE Ha ocurrido un error: '
                 || SQLCODE
                 || SQLERRM);
-    END PR_SALDO_PENDIENTE;/*-----------------------------------------------------------------------------------
-Procedimiento para establecer en cero el saldo actual y el saldo pendiente de una cuenta de cobro
-Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
-                        PK_BLOQUE       Código del bloque de apartamentos
-                        PK_APTO         Código del apartamento
-                        PN_MES          Periodo del mes de la cuenta de cobro
-                        PN_ANIO         Periodo del año de la cuenta de cobro
-------------------------------------------------------------------------------------*/
+    END PR_SALDO_PENDIENTE;
     PROCEDURE PR_INIT_SALDOS (
         PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
         PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
@@ -601,7 +593,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
         PC_ERROR OUT INTEGER,
         PM_ERROR OUT VARCHAR
     ) AS
-    -- Declaración de variables locales
+ -- Declaración de variables locales
         LK_CUENTA CUENTA_COBRO.COD_CUENTA_COBRO%TYPE;
         LN_MES    CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
         LN_ANIO   CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
@@ -653,11 +645,7 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
             RAISE_APPLICATION_ERROR(-20001, 'PR_INIT_SALDOS Ha ocurrido un error: '
                 || SQLCODE
                 || SQLERRM);
-    END PR_INIT_SALDOS;/*-----------------------------------------------------------------------------------
-Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
-Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
-                        PM_ERROR        Mensaje de error si hay error o null en caso contrario
-------------------------------------------------------------------------------------*/
+    END PR_INIT_SALDOS;
     PROCEDURE PR_CALC_DESC_MORA (
         PC_ERROR OUT INTEGER,
         PM_ERROR OUT VARCHAR
@@ -796,7 +784,7 @@ Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
                     ROLLBACK;
                     RAISE LE_INCONSISTENCIA;
                 END IF;
-                PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA,PC_ERROR,PM_ERROR);
+                PR_SALDO_PENDIENTE(R_SALDOS.COD_CONJUNTO, R_SALDOS.COD_BLOQUE, R_SALDOS.COD_APARTAMENTO, R_PERIODO.PERIODO_MES_CUENTA, R_PERIODO.PERIODO_ANIO_CUENTA, PC_ERROR, PM_ERROR);
             END LOOP;
         END LOOP;
     EXCEPTION
@@ -894,31 +882,24 @@ No se que poner aca
             C.NOMBRE_CONJUNTO,
             A.COD_BLOQUE,
             A.COD_APARTAMENTO,
-            MAX(CC.SALDO_PENDIENTE),
-            P.FECHA_PAGO INTO GR_APTOS_MORA.NOMBRE_CONJUNTO,
+            MAX(CC.SALDO_PENDIENTE) INTO GR_APTOS_MORA.NOMBRE_CONJUNTO,
             GR_APTOS_MORA.COD_BLOQUE,
             GR_APTOS_MORA.COD_APARTAMENTO,
-            GR_APTOS_MORA.SALDO_PENDIENTE,
-            GR_APTOS_MORA.FECHA_PAGO
+            GR_APTOS_MORA.SALDO_PENDIENTE
         FROM
             CONJUNTO     C,
             APARTAMENTO  A,
-            CUENTA_COBRO CC,
-            PAGO         P
+            CUENTA_COBRO CC
         WHERE
             C.COD_CONJUNTO = A.COD_CONJUNTO
             AND A.COD_CONJUNTO = CC.COD_CONJUNTO
             AND A.COD_BLOQUE = CC.COD_BLOQUE
             AND A.COD_APARTAMENTO = CC.COD_APARTAMENTO
             AND CC.SALDO_PENDIENTE > 0
-            AND A.COD_CONJUNTO = P.COD_CONJUNTO
-            AND A.COD_BLOQUE = P.COD_BLOQUE
-            AND A.COD_APARTAMENTO = P.COD_APARTAMENTO
         GROUP BY
             C.NOMBRE_CONJUNTO,
             A.COD_BLOQUE,
-            A.COD_APARTAMENTO,
-            P.FECHA_PAGO;
+            A.COD_APARTAMENTO;
         RETURN GR_APTOS_MORA;
     EXCEPTION
         WHEN OTHERS THEN
@@ -957,12 +938,18 @@ Parámetros de Entrada:  PK_APTO         Código del apartamento
             PERSONA_RESPONSABLE PR,
             PERSONA_RESIDENTE   PV
         WHERE
-            C.COD_CONJUNTO = A.COD_CONJUNTO
+            (C.COD_CONJUNTO = A.COD_CONJUNTO
             AND A.COD_APARTAMENTO = R.COD_APARTAMENTO
             AND A.COD_BLOQUE = R.COD_BLOQUE
             AND A.COD_CONJUNTO = R.COD_CONJUNTO
-            AND PV.COD_PERSONA = R.COD_PERSONA
-            AND A.COD_PERSONA = PR.COD_PERSONA;
+            AND P.COD_PERSONA = PV.COD_PERSONA
+            AND PV.COD_PERSONA = R.COD_PERSONA)
+            OR (P.COD_PERSONA = PR.COD_PERSONA
+            AND PR.COD_PERSONA = A.COD_PERSONA
+            AND A.COD_CONJUNTO = C.COD_CONJUNTO)
+            AND A.COD_APARTAMENTO = PK_APTO
+            AND A.COD_BLOQUE = PK_BLOQUE
+            AND A.COD_CONJUNTO = PK_CONJUNTO;
         RETURN GR_PERSONA_APTO;
     EXCEPTION
         WHEN OTHERS THEN
