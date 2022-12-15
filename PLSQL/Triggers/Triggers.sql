@@ -184,7 +184,7 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001, 'TR_CONCEPTO_ADMIN Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
-END;
+END TR_CONCEPTO_ADMIN;
 /
 
 ------------------------------------------------------ Trigger para insertar los saldos por concepto en una cuenta
@@ -228,7 +228,7 @@ BEGIN
             SALDO_PENDIENTE = 0
         WHERE
             COD_CUENTA_COBRO = :NEW.COD_CUENTA_COBRO;
-        PR_INIT_SALDOS (LK_CONJUNTO, LK_BLOQUE, LK_APTO, LN_MES - 1, LN_ANIO);
+        PK_CONJUNTOS.PR_INIT_SALDOS (LK_CONJUNTO, LK_BLOQUE, LK_APTO, LN_MES - 1, LN_ANIO, LC_ERROR, LM_ERROR);
     ELSE
         UPDATE CUENTA_COBRO
         SET
@@ -241,5 +241,5 @@ EXCEPTION
         RAISE_APPLICATION_ERROR(-20001, 'TR_CONCEPTO_CUENTA Ha ocurrido un error: '
             || SQLCODE
             || SQLERRM);
-END;
+END TR_CONCEPTO_CUENTA;
 /
