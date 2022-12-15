@@ -37,7 +37,7 @@ END TR_PAGO_CUENTA;
 /
 
 ------------------------------------------------------ Trigger para insertar los datos correspondientes de pago a la tabla de auditoria.
-CREATE OR REPLACE TRIGGER AUDIT_PAGO AFTER
+CREATE OR REPLACE TRIGGER TR_AUDIT_PAGO AFTER
     UPDATE OR INSERT ON PAGO FOR EACH ROW
 DECLARE
     LK_AUDIT AUDIT_CUENTAS.COD_AUDIT_CUENTAS%TYPE;
@@ -119,7 +119,7 @@ END TR_SALDO_PENDIENTE;
 /
 
 ------------------------------------------------------ Trigger para insertar los datos correspondientes de la cuenta de cobro a la tabla de auditoria.
-CREATE OR REPLACE TRIGGER AUDIT_CUENTA AFTER
+CREATE OR REPLACE TRIGGER TR_AUDIT_CUENTA AFTER
     UPDATE OR INSERT ON CUENTA_COBRO FOR EACH ROW
 DECLARE
     LK_AUDIT AUDIT_CUENTAS.COD_AUDIT_CUENTAS%TYPE;
