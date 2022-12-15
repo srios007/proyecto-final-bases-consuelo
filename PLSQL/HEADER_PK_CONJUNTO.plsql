@@ -39,6 +39,8 @@ Parámetros de Salida:   PV_ACTUAL       Valor del saldo actual
                         PV_PENDIENTE    valor del saldo pendiente
                         PV_INTERES      valor del interes 
                         PV_DESCUENTO    valor del descuento 
+                        PC_ERROR        1 si no existe, 0 , en caso contrario
+                        PM_ERROR        Mensaje de error si hay error o null en caso contrario
 ------------------------------------------------------------------------------------*/
     PROCEDURE PR_CALC_PAGO (
         PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
@@ -122,7 +124,6 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
                         PK_BLOQUE       Código del bloque de apartamentos
                         PK_APTO         Código del apartamento
                         PV_PAGADO       Valor pagado  
-                        PT_PAGO         Forma o tipo de pago
 
 Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
                         PM_ERROR        Mensaje de error si hay error o null en caso contrario
@@ -132,7 +133,9 @@ Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
         PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
         PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
         PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
-        PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE
+        PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
     );
  /*-----------------------------------------------------------------------------------
 Procedimiento para recalcular los saldos pendientes de una cuenta de cobro.
@@ -151,7 +154,9 @@ Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
         PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
         PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
         PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
-        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE
+        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
     );
  /*-----------------------------------------------------------------------------------
 Procedimiento para establecer en cero el saldo actual y el saldo pendiente de una cuenta de cobro
@@ -170,7 +175,9 @@ Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
         PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
         PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
         PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
-        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE
+        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
     );
  /*-----------------------------------------------------------------------------------
 Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
