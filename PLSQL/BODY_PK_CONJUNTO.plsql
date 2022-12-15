@@ -331,308 +331,71 @@ Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
                         PT_PAGO         Forma o tipo de pago
 
 ------------------------------------------------------------------------------------*/
-CREATE OR REPLACE PROCEDURE PR_PAGAR_SALDO (
-    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
-    PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
-    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
-    PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE,
-    PC_ERROR OUT INTEGER,
-    PM_ERROR OUT VARCHAR
-) AS  -- Declaración de variables locales
-    LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
-    LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
-    LS_RESTANTE  CUENTA_COBRO.SALDO_ACTUAL%TYPE;
-    LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
-    LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
-    LF_ACTUAL    PAGO.FECHA_PAGO%TYPE;
-    L_NUM        INTEGER;
-BEGIN
-    SELECT
-        MAX(PERIODO_MES_CUENTA),
-        MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
-        LN_ANIO
-    FROM
-        CUENTA_COBRO
-    WHERE
-        COD_CONJUNTO = PK_CONJUNTO
-        AND COD_BLOQUE = PK_BLOQUE
-        AND COD_APARTAMENTO = PK_APTO
-    GROUP BY
-        PERIODO_ANIO_CUENTA
-    ORDER BY
-        PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
-    SELECT
-        FU_CALC_V_PENDIENTE(PK_CONJUNTO,
-        PK_BLOQUE,
-        PK_APTO,
-        LN_MES,
-        LN_ANIO) INTO LS_PENDIENTE
-    FROM
-        DUAL;
-    SELECT
-        FU_CALC_V_ACTUAL(PK_CONJUNTO,
-        PK_BLOQUE,
-        PK_APTO,
-        LN_MES,
-        LN_ANIO) INTO LS_ACTUAL
-    FROM
-        DUAL;
-    IF LS_PENDIENTE <= 0 THEN
-        UPDATE CUENTA_COBRO
-        SET
-            SALDO_ACTUAL = SALDO_ACTUAL - (
-                PV_PAGADO + LS_PENDIENTE
-            )
-        WHERE
-            COD_CONJUNTO = PK_CONJUNTO
-            AND COD_BLOQUE = PK_BLOQUE
-            AND COD_APARTAMENTO = PK_APTO
-            AND PERIODO_MES_CUENTA = LN_MES
-            AND PERIODO_ANIO_CUENTA = LN_ANIO;
-    ELSIF (LS_ACTUAL + LS_PENDIENTE) <= PV_PAGADO THEN
-        UPDATE CUENTA_COBRO
-        SET
-            SALDO_PENDIENTE = 0,
-            SALDO_ACTUAL = (
-                LS_ACTUAL + LS_PENDIENTE
-            ) - PV_PAGADO,
-            ESTADO_CUENTA = 'Pagado'
-        WHERE
-            COD_CONJUNTO = PK_CONJUNTO
-            AND COD_BLOQUE = PK_BLOQUE
-            AND COD_APARTAMENTO = PK_APTO
-            AND PERIODO_MES_CUENTA = LN_MES
-            AND PERIODO_ANIO_CUENTA = LN_ANIO;
-        PR_INIT_SALDOS (PK_CONJUNTO, PK_BLOQUE, PK_APTO, LN_MES - 1, LN_ANIO,PC_ERROR,PM_ERROR);
-    ELSIF LS_PENDIENTE > 0 THEN
-        IF LN_MES > 1 THEN
-            L_NUM := LN_MES - 1;
-        ELSE
-            L_NUM := 12;
-            LN_ANIO := LN_ANIO - 1;
-        END IF;
-        LOOP
-            SELECT
-                FU_CALC_V_PENDIENTE(PK_CONJUNTO,
-                PK_BLOQUE,
-                PK_APTO,
-                L_NUM,
-                LN_ANIO) INTO LS_PENDIENTE
-            FROM
-                DUAL;
-            IF LS_PENDIENTE <= 0 THEN
-                SELECT
-                    FU_CALC_V_ACTUAL(PK_CONJUNTO,
-                    PK_BLOQUE,
-                    PK_APTO,
-                    L_NUM,
-                    LN_ANIO) INTO LS_ACTUAL
-                FROM
-                    DUAL;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = LS_ACTUAL - (
-                        PV_PAGADO + LS_PENDIENTE
-                    )
-                WHERE
-                    COD_CONJUNTO = PK_CONJUNTO
-                    AND COD_BLOQUE = PK_BLOQUE
-                    AND COD_APARTAMENTO = PK_APTO
-                    AND PERIODO_MES_CUENTA = L_NUM
-                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
-                IF L_NUM = 12 THEN
-                    L_NUM := 0;
-                    LN_ANIO := LN_ANIO + 1;
-                END IF;
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_PENDIENTE = LS_ACTUAL - (
-                        PV_PAGADO + LS_PENDIENTE
-                    )
-                WHERE
-                    COD_CONJUNTO = PK_CONJUNTO
-                    AND COD_BLOQUE = PK_BLOQUE
-                    AND COD_APARTAMENTO = PK_APTO
-                    AND PERIODO_MES_CUENTA = L_NUM + 1
-                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
-                PR_SALDO_PENDIENTE(PK_CONJUNTO, PK_BLOQUE, PK_APTO, L_NUM, LN_ANIO ,PC_ERROR,PM_ERROR);
-                EXIT;
-            END IF;
-            IF L_NUM != 1 THEN
-                L_NUM := L_NUM -1;
-            ELSIF L_NUM = 1 THEN
-                L_NUM := 12;
-                LN_ANIO := LN_ANIO - 1;
-            END IF;
-        END LOOP;
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN
-        PC_ERROR := 1;
-        PM_ERROR := 'Error pagar una cuenta de cobro.';
-        RAISE_APPLICATION_ERROR(-20001, 'PR_PAGAR_SALDO Ha ocurrido un error: '
-            || SQLCODE
-            || SQLERRM);
-END PR_PAGAR_SALDO;
-/ /*-----------------------------------------------------------------------------------
-Procedimiento para recalcular los saldos pendientes de una cuenta de cobro.
-Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
-                        PK_BLOQUE       Código del bloque de apartamentos
-                        PK_APTO         Código del apartamento
-                        PN_MES          Periodo del mes de la cuenta de cobro
-                        PN_ANIO         Periodo del año de la cuenta de cobro
-------------------------------------------------------------------------------------*/
-CREATE OR REPLACE PROCEDURE PR_SALDO_PENDIENTE (
-    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
-    PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
-    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
-    PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
-    PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
-    PC_ERROR OUT INTEGER,
-    PM_ERROR OUT VARCHAR
-)AS
- -- Declaración de variables locales
-    LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE := 0;
-    LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
-    LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
-BEGIN
-    IF PN_MES = 12 THEN
-        LN_MES := 1;
-        LN_ANIO := PN_ANIO + 1;
-    ELSE
-        LN_MES := PN_MES + 1;
-        LN_ANIO := PN_ANIO;
-    END IF;
-    LOOP
-        IF LN_MES = 1 THEN
-            SELECT
-                SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
-            FROM
-                CUENTA_COBRO
-            WHERE
-                PERIODO_MES_CUENTA = 12
-                AND PERIODO_ANIO_CUENTA = LN_ANIO-1
-                AND COD_CONJUNTO = PK_CONJUNTO
-                AND COD_BLOQUE = PK_BLOQUE
-                AND COD_APARTAMENTO = PK_APTO;
-        ELSE
-            SELECT
-                SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
-            FROM
-                CUENTA_COBRO
-            WHERE
-                PERIODO_MES_CUENTA = LN_MES - 1
-                AND PERIODO_ANIO_CUENTA = LN_ANIO
-                AND COD_CONJUNTO = PK_CONJUNTO
-                AND COD_BLOQUE = PK_BLOQUE
-                AND COD_APARTAMENTO = PK_APTO;
-        END IF;
-        IF LS_PENDIENTE IS NULL THEN
-            EXIT;
-        ELSIF LS_PENDIENTE < 0 THEN
-            UPDATE CUENTA_COBRO
-            SET
-                SALDO_PENDIENTE = 0,
-                SALDO_ACTUAL = SALDO_ACTUAL + LS_PENDIENTE
-            WHERE
-                COD_CONJUNTO = PK_CONJUNTO
-                AND COD_BLOQUE = PK_BLOQUE
-                AND COD_APARTAMENTO = PK_APTO
-                AND PERIODO_MES_CUENTA = LN_MES
-                AND PERIODO_ANIO_CUENTA = LN_ANIO;
-            IF LN_MES != 1 THEN
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = 0
-                WHERE
-                    COD_CONJUNTO = PK_CONJUNTO
-                    AND COD_BLOQUE = PK_BLOQUE
-                    AND COD_APARTAMENTO = PK_APTO
-                    AND PERIODO_MES_CUENTA = LN_MES - 1
-                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
-            ELSE
-                UPDATE CUENTA_COBRO
-                SET
-                    SALDO_ACTUAL = 0
-                WHERE
-                    COD_CONJUNTO = PK_CONJUNTO
-                    AND COD_BLOQUE = PK_BLOQUE
-                    AND COD_APARTAMENTO = PK_APTO
-                    AND PERIODO_MES_CUENTA = 12
-                    AND PERIODO_ANIO_CUENTA = LN_ANIO - 1;
-            END IF;
-        ELSE
-            UPDATE CUENTA_COBRO
-            SET
-                SALDO_PENDIENTE = LS_PENDIENTE
-            WHERE
-                COD_CONJUNTO = PK_CONJUNTO
-                AND COD_BLOQUE = PK_BLOQUE
-                AND COD_APARTAMENTO = PK_APTO
-                AND PERIODO_MES_CUENTA = LN_MES
-                AND PERIODO_ANIO_CUENTA = LN_ANIO;
-        END IF;
-        IF LN_MES != 12 THEN
-            LN_MES := LN_MES + 1;
-        ELSIF LN_MES = 12 THEN
-            LN_MES := 1;
-            LN_ANIO := LN_ANIO + 1;
-        END IF;
-    END LOOP;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20001, 'PR_SALDO_PENDIENTE Ha ocurrido un error: '
-            || SQLCODE
-            || SQLERRM);
-END PR_SALDO_PENDIENTE;/*-----------------------------------------------------------------------------------
-Procedimiento para establecer en cero el saldo actual y el saldo pendiente de una cuenta de cobro
-Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
-                        PK_BLOQUE       Código del bloque de apartamentos
-                        PK_APTO         Código del apartamento
-                        PN_MES          Periodo del mes de la cuenta de cobro
-                        PN_ANIO         Periodo del año de la cuenta de cobro
-------------------------------------------------------------------------------------*/
-CREATE OR REPLACE PROCEDURE PR_INIT_SALDOS (
-    PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
-    PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
-    PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
-    PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
-    PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
-    PC_ERROR OUT INTEGER,
-    PM_ERROR OUT VARCHAR
-) AS
- -- Declaración de variables locales
-    LK_CUENTA CUENTA_COBRO.COD_CUENTA_COBRO%TYPE;
-    LN_MES    CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
-    LN_ANIO   CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
-BEGIN
-    IF PN_MES < 1 THEN
-        LN_MES := 12;
-        LN_ANIO := PN_ANIO - 1;
-    ELSE
-        LN_MES := PN_MES;
-        LN_ANIO := PN_ANIO;
-    END IF;
-    LOOP
+    PROCEDURE PR_PAGAR_SALDO (
+        PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
+        PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
+        PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+        PV_PAGADO IN PAGO.VALOR_PAGADO%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
+    ) AS  -- Declaración de variables locales
+        LS_ACTUAL    CUENTA_COBRO.SALDO_ACTUAL%TYPE;
+        LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE;
+        LS_RESTANTE  CUENTA_COBRO.SALDO_ACTUAL%TYPE;
+        LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+        LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
+        LF_ACTUAL    PAGO.FECHA_PAGO%TYPE;
+        L_NUM        INTEGER;
+    BEGIN
         SELECT
-            MAX(COD_CUENTA_COBRO) INTO LK_CUENTA
+            MAX(PERIODO_MES_CUENTA),
+            MAX(PERIODO_ANIO_CUENTA) INTO LN_MES,
+            LN_ANIO
         FROM
             CUENTA_COBRO
         WHERE
             COD_CONJUNTO = PK_CONJUNTO
             AND COD_BLOQUE = PK_BLOQUE
             AND COD_APARTAMENTO = PK_APTO
-            AND PERIODO_MES_CUENTA = LN_MES
-            AND PERIODO_ANIO_CUENTA = LN_ANIO;
-        IF LK_CUENTA IS NULL THEN
-            EXIT;
-        ELSE
+        GROUP BY
+            PERIODO_ANIO_CUENTA
+        ORDER BY
+            PERIODO_ANIO_CUENTA DESC FETCH FIRST 1 ROWS ONLY;
+        SELECT
+            FU_CALC_V_PENDIENTE(PK_CONJUNTO,
+            PK_BLOQUE,
+            PK_APTO,
+            LN_MES,
+            LN_ANIO) INTO LS_PENDIENTE
+        FROM
+            DUAL;
+        SELECT
+            FU_CALC_V_ACTUAL(PK_CONJUNTO,
+            PK_BLOQUE,
+            PK_APTO,
+            LN_MES,
+            LN_ANIO) INTO LS_ACTUAL
+        FROM
+            DUAL;
+        IF LS_PENDIENTE <= 0 THEN
             UPDATE CUENTA_COBRO
             SET
-                SALDO_ACTUAL = 0,
+                SALDO_ACTUAL = SALDO_ACTUAL - (
+                    PV_PAGADO + LS_PENDIENTE
+                )
+            WHERE
+                COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO
+                AND PERIODO_MES_CUENTA = LN_MES
+                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+        ELSIF (LS_ACTUAL + LS_PENDIENTE) <= PV_PAGADO THEN
+            UPDATE CUENTA_COBRO
+            SET
                 SALDO_PENDIENTE = 0,
-                VALOR_DESCUENTO = 0,
-                VALOR_MORA = 0,
+                SALDO_ACTUAL = (
+                    LS_ACTUAL + LS_PENDIENTE
+                ) - PV_PAGADO,
                 ESTADO_CUENTA = 'Pagado'
             WHERE
                 COD_CONJUNTO = PK_CONJUNTO
@@ -640,20 +403,257 @@ BEGIN
                 AND COD_APARTAMENTO = PK_APTO
                 AND PERIODO_MES_CUENTA = LN_MES
                 AND PERIODO_ANIO_CUENTA = LN_ANIO;
-            IF LN_MES < 1 THEN
-                LN_MES := 12;
-                LN_ANIO := PN_ANIO - 1;
+            PR_INIT_SALDOS (PK_CONJUNTO, PK_BLOQUE, PK_APTO, LN_MES - 1, LN_ANIO,PC_ERROR,PM_ERROR);
+        ELSIF LS_PENDIENTE > 0 THEN
+            IF LN_MES > 1 THEN
+                L_NUM := LN_MES - 1;
             ELSE
-                LN_MES := LN_MES - 1;
+                L_NUM := 12;
+                LN_ANIO := LN_ANIO - 1;
             END IF;
+            LOOP
+                SELECT
+                    FU_CALC_V_PENDIENTE(PK_CONJUNTO,
+                    PK_BLOQUE,
+                    PK_APTO,
+                    L_NUM,
+                    LN_ANIO) INTO LS_PENDIENTE
+                FROM
+                    DUAL;
+                IF LS_PENDIENTE <= 0 THEN
+                    SELECT
+                        FU_CALC_V_ACTUAL(PK_CONJUNTO,
+                        PK_BLOQUE,
+                        PK_APTO,
+                        L_NUM,
+                        LN_ANIO) INTO LS_ACTUAL
+                    FROM
+                        DUAL;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = LS_ACTUAL - (
+                            PV_PAGADO + LS_PENDIENTE
+                        )
+                    WHERE
+                        COD_CONJUNTO = PK_CONJUNTO
+                        AND COD_BLOQUE = PK_BLOQUE
+                        AND COD_APARTAMENTO = PK_APTO
+                        AND PERIODO_MES_CUENTA = L_NUM
+                        AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                    IF L_NUM = 12 THEN
+                        L_NUM := 0;
+                        LN_ANIO := LN_ANIO + 1;
+                    END IF;
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_PENDIENTE = LS_ACTUAL - (
+                            PV_PAGADO + LS_PENDIENTE
+                        )
+                    WHERE
+                        COD_CONJUNTO = PK_CONJUNTO
+                        AND COD_BLOQUE = PK_BLOQUE
+                        AND COD_APARTAMENTO = PK_APTO
+                        AND PERIODO_MES_CUENTA = L_NUM + 1
+                        AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                    PR_SALDO_PENDIENTE(PK_CONJUNTO, PK_BLOQUE, PK_APTO, L_NUM, LN_ANIO ,PC_ERROR,PM_ERROR);
+                    EXIT;
+                END IF;
+                IF L_NUM != 1 THEN
+                    L_NUM := L_NUM -1;
+                ELSIF L_NUM = 1 THEN
+                    L_NUM := 12;
+                    LN_ANIO := LN_ANIO - 1;
+                END IF;
+            END LOOP;
         END IF;
-    END LOOP;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE_APPLICATION_ERROR(-20001, 'PR_INIT_SALDOS Ha ocurrido un error: '
-            || SQLCODE
-            || SQLERRM);
-END PR_INIT_SALDOS;/*-----------------------------------------------------------------------------------
+    EXCEPTION
+        WHEN OTHERS THEN
+            PC_ERROR := 1;
+            PM_ERROR := 'Error pagar una cuenta de cobro.';
+            RAISE_APPLICATION_ERROR(-20001, 'PR_PAGAR_SALDO Ha ocurrido un error: '
+                || SQLCODE
+                || SQLERRM);
+    END PR_PAGAR_SALDO;
+ /*-----------------------------------------------------------------------------------
+Procedimiento para recalcular los saldos pendientes de una cuenta de cobro.
+Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
+                        PK_BLOQUE       Código del bloque de apartamentos
+                        PK_APTO         Código del apartamento
+                        PN_MES          Periodo del mes de la cuenta de cobro
+                        PN_ANIO         Periodo del año de la cuenta de cobro
+------------------------------------------------------------------------------------*/
+    PROCEDURE PR_SALDO_PENDIENTE (
+        PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
+        PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
+        PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+        PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
+        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
+    )AS
+    -- Declaración de variables locales
+        LS_PENDIENTE CUENTA_COBRO.SALDO_PENDIENTE%TYPE := 0;
+        LN_MES       CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+        LN_ANIO      CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
+    BEGIN
+        IF PN_MES = 12 THEN
+            LN_MES := 1;
+            LN_ANIO := PN_ANIO + 1;
+        ELSE
+            LN_MES := PN_MES + 1;
+            LN_ANIO := PN_ANIO;
+        END IF;
+        LOOP
+            IF LN_MES = 1 THEN
+                SELECT
+                    SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
+                FROM
+                    CUENTA_COBRO
+                WHERE
+                    PERIODO_MES_CUENTA = 12
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO-1
+                    AND COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO;
+            ELSE
+                SELECT
+                    SUM(SALDO_ACTUAL + SALDO_PENDIENTE) INTO LS_PENDIENTE
+                FROM
+                    CUENTA_COBRO
+                WHERE
+                    PERIODO_MES_CUENTA = LN_MES - 1
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO
+                    AND COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO;
+            END IF;
+            IF LS_PENDIENTE IS NULL THEN
+                EXIT;
+            ELSIF LS_PENDIENTE < 0 THEN
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_PENDIENTE = 0,
+                    SALDO_ACTUAL = SALDO_ACTUAL + LS_PENDIENTE
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = LN_MES
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                IF LN_MES != 1 THEN
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = 0
+                    WHERE
+                        COD_CONJUNTO = PK_CONJUNTO
+                        AND COD_BLOQUE = PK_BLOQUE
+                        AND COD_APARTAMENTO = PK_APTO
+                        AND PERIODO_MES_CUENTA = LN_MES - 1
+                        AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                ELSE
+                    UPDATE CUENTA_COBRO
+                    SET
+                        SALDO_ACTUAL = 0
+                    WHERE
+                        COD_CONJUNTO = PK_CONJUNTO
+                        AND COD_BLOQUE = PK_BLOQUE
+                        AND COD_APARTAMENTO = PK_APTO
+                        AND PERIODO_MES_CUENTA = 12
+                        AND PERIODO_ANIO_CUENTA = LN_ANIO - 1;
+                END IF;
+            ELSE
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_PENDIENTE = LS_PENDIENTE
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = LN_MES
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+            END IF;
+            IF LN_MES != 12 THEN
+                LN_MES := LN_MES + 1;
+            ELSIF LN_MES = 12 THEN
+                LN_MES := 1;
+                LN_ANIO := LN_ANIO + 1;
+            END IF;
+        END LOOP;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20001, 'PR_SALDO_PENDIENTE Ha ocurrido un error: '
+                || SQLCODE
+                || SQLERRM);
+    END PR_SALDO_PENDIENTE;/*-----------------------------------------------------------------------------------
+Procedimiento para establecer en cero el saldo actual y el saldo pendiente de una cuenta de cobro
+Parámetros de Entrada:  PK_CONJUNTO     Código del conjunto de apartamentos
+                        PK_BLOQUE       Código del bloque de apartamentos
+                        PK_APTO         Código del apartamento
+                        PN_MES          Periodo del mes de la cuenta de cobro
+                        PN_ANIO         Periodo del año de la cuenta de cobro
+------------------------------------------------------------------------------------*/
+    PROCEDURE PR_INIT_SALDOS (
+        PK_CONJUNTO IN CONJUNTO.COD_CONJUNTO%TYPE,
+        PK_BLOQUE IN APARTAMENTO.COD_BLOQUE%TYPE,
+        PK_APTO IN APARTAMENTO.COD_APARTAMENTO%TYPE,
+        PN_MES IN CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE,
+        PN_ANIO IN CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE,
+        PC_ERROR OUT INTEGER,
+        PM_ERROR OUT VARCHAR
+    ) AS
+    -- Declaración de variables locales
+        LK_CUENTA CUENTA_COBRO.COD_CUENTA_COBRO%TYPE;
+        LN_MES    CUENTA_COBRO.PERIODO_MES_CUENTA%TYPE;
+        LN_ANIO   CUENTA_COBRO.PERIODO_ANIO_CUENTA%TYPE;
+    BEGIN
+        IF PN_MES < 1 THEN
+            LN_MES := 12;
+            LN_ANIO := PN_ANIO - 1;
+        ELSE
+            LN_MES := PN_MES;
+            LN_ANIO := PN_ANIO;
+        END IF;
+        LOOP
+            SELECT
+                MAX(COD_CUENTA_COBRO) INTO LK_CUENTA
+            FROM
+                CUENTA_COBRO
+            WHERE
+                COD_CONJUNTO = PK_CONJUNTO
+                AND COD_BLOQUE = PK_BLOQUE
+                AND COD_APARTAMENTO = PK_APTO
+                AND PERIODO_MES_CUENTA = LN_MES
+                AND PERIODO_ANIO_CUENTA = LN_ANIO;
+            IF LK_CUENTA IS NULL THEN
+                EXIT;
+            ELSE
+                UPDATE CUENTA_COBRO
+                SET
+                    SALDO_ACTUAL = 0,
+                    SALDO_PENDIENTE = 0,
+                    VALOR_DESCUENTO = 0,
+                    VALOR_MORA = 0,
+                    ESTADO_CUENTA = 'Pagado'
+                WHERE
+                    COD_CONJUNTO = PK_CONJUNTO
+                    AND COD_BLOQUE = PK_BLOQUE
+                    AND COD_APARTAMENTO = PK_APTO
+                    AND PERIODO_MES_CUENTA = LN_MES
+                    AND PERIODO_ANIO_CUENTA = LN_ANIO;
+                IF LN_MES < 1 THEN
+                    LN_MES := 12;
+                    LN_ANIO := PN_ANIO - 1;
+                ELSE
+                    LN_MES := LN_MES - 1;
+                END IF;
+            END IF;
+        END LOOP;
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE_APPLICATION_ERROR(-20001, 'PR_INIT_SALDOS Ha ocurrido un error: '
+                || SQLCODE
+                || SQLERRM);
+    END PR_INIT_SALDOS;/*-----------------------------------------------------------------------------------
 Procedimiento que calcula el valor de descuento o mora de las cuentas de cobro del último mes y lo inserta en la cuenta de cobro.
 Parámetros de Salida:   PC_ERROR         1 si no existe, 0 , en caso contrario
                         PM_ERROR        Mensaje de error si hay error o null en caso contrario
